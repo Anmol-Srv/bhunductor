@@ -1,11 +1,11 @@
 const { ipcMain, dialog, app } = require('electron');
 const { IPC_CHANNELS } = require('../shared/constants');
+const Folder = require('./data/models/Folder');
 
 /**
  * Register all IPC handlers
  */
-function registerIPCHandlers(configManager, folderManager) {
-  // Config handlers
+function registerIPCHandlers(configManager) {
   ipcMain.handle(IPC_CHANNELS.CONFIG_GET, (event, key) => {
     try {
       if (key) {
@@ -44,15 +44,15 @@ function registerIPCHandlers(configManager, folderManager) {
       const folderPath = result.filePaths[0];
 
       // Validate git repo
-      if (!folderManager.isGitRepo(folderPath)) {
+      if (!Folder.isGitRepo(folderPath)) {
         return {
           error: 'Selected folder is not a git repository',
           path: folderPath
         };
       }
 
-      // Add to database
-      const folder = folderManager.addFolder(folderPath);
+      // Add or update folder
+      const folder = Folder.addOrUpdate(folderPath);
       return { folder };
     } catch (error) {
       console.error('[IPC] Error opening folder:', error);
@@ -62,7 +62,7 @@ function registerIPCHandlers(configManager, folderManager) {
 
   ipcMain.handle(IPC_CHANNELS.FOLDER_GET_RECENT, () => {
     try {
-      return folderManager.getRecentFolders();
+      return Folder.findRecent();
     } catch (error) {
       console.error('[IPC] Error getting recent folders:', error);
       throw error;
@@ -71,7 +71,7 @@ function registerIPCHandlers(configManager, folderManager) {
 
   ipcMain.handle(IPC_CHANNELS.FOLDER_ADD, (event, folderPath) => {
     try {
-      const folder = folderManager.addFolder(folderPath);
+      const folder = Folder.addOrUpdate(folderPath);
       return folder;
     } catch (error) {
       console.error('[IPC] Error adding folder:', error);
@@ -81,7 +81,7 @@ function registerIPCHandlers(configManager, folderManager) {
 
   ipcMain.handle(IPC_CHANNELS.FOLDER_REMOVE, (event, folderId) => {
     try {
-      const removed = folderManager.removeFolder(folderId);
+      const removed = Folder.delete(folderId);
       return { success: removed };
     } catch (error) {
       console.error('[IPC] Error removing folder:', error);
@@ -91,7 +91,7 @@ function registerIPCHandlers(configManager, folderManager) {
 
   ipcMain.handle(IPC_CHANNELS.FOLDER_VALIDATE_GIT, (event, folderPath) => {
     try {
-      const isValid = folderManager.isGitRepo(folderPath);
+      const isValid = Folder.isGitRepo(folderPath);
       return { valid: isValid };
     } catch (error) {
       console.error('[IPC] Error validating git repo:', error);
@@ -99,7 +99,6 @@ function registerIPCHandlers(configManager, folderManager) {
     }
   });
 
-  // App handlers
   ipcMain.handle(IPC_CHANNELS.APP_GET_VERSION, () => {
     return app.getVersion();
   });

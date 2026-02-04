@@ -1,17 +1,14 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const ConfigManager = require('./data/config-manager');
-const FolderManager = require('./data/folder-manager');
+const { getDatabase, closeDatabase } = require('./data/database');
+const Folder = require('./data/models/Folder');
 const { registerIPCHandlers } = require('./ipc-handlers');
 const { WINDOW_WIDTH, WINDOW_HEIGHT } = require('../shared/constants');
 
 let mainWindow = null;
 let configManager = null;
-let folderManager = null;
 
-/**
- * Create the main application window
- */
 function createWindow() {
   const { width, height } = configManager.get('window') || {
     width: WINDOW_WIDTH,
@@ -54,22 +51,20 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
-
-  console.log('[Main] Window created and centered');
 }
 
-/**
- * Initialize app
- */
 app.whenReady().then(() => {
   console.log('[Main] App ready, initializing...');
 
-  // Initialize managers
+  // Initialize config manager
   configManager = new ConfigManager();
-  folderManager = new FolderManager();
+
+  // Initialize database and run cleanup
+  getDatabase();
+  Folder.cleanupInvalid();
 
   // Register IPC handlers
-  registerIPCHandlers(configManager, folderManager);
+  registerIPCHandlers(configManager);
 
   // Create window
   createWindow();
@@ -91,9 +86,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('quit', () => {
-  if (folderManager) {
-    folderManager.close();
-  }
+  closeDatabase();
   console.log('[Main] App quit');
 });
 

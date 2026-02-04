@@ -8,31 +8,21 @@ function App() {
   const [folderHistory, setFolderHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
-  /**
-   * Navigate to a folder
-   */
   const openFolder = (folder) => {
     setCurrentFolder(folder);
     setCurrentView('dashboard');
 
-    // Add to history
     const newHistory = folderHistory.slice(0, historyIndex + 1);
     newHistory.push(folder);
     setFolderHistory(newHistory);
     setHistoryIndex(newHistory.length - 1);
   };
 
-  /**
-   * Go back to home
-   */
   const goHome = () => {
     setCurrentView('home');
     setCurrentFolder(null);
   };
 
-  /**
-   * Navigate back in history
-   */
   const goBack = () => {
     if (historyIndex > 0) {
       const newIndex = historyIndex - 1;
@@ -43,9 +33,6 @@ function App() {
     }
   };
 
-  /**
-   * Navigate forward in history
-   */
   const goForward = () => {
     if (historyIndex < folderHistory.length - 1) {
       const newIndex = historyIndex + 1;
