@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+renderer/bundle.js
+renderer/bundle.js.map
+dist/
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+logs/
+*.log
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env

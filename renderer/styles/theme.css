@@ -1,0 +1,54 @@
+/* Dark minimal theme */
+:root {
+  /* Background colors */
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #141414;
+  --bg-tertiary: #1e1e1e;
+  --bg-hover: #252525;
+
+  /* Accent colors - blue only */
+  --accent-primary: #0066cc;
+  --accent-secondary: #0052a3;
+  --accent-glow: rgba(0, 102, 204, 0.2);
+
+  /* Text colors */
+  --text-primary: #e0e0e0;
+  --text-secondary: #909090;
+  --text-tertiary: #606060;
+
+  /* Border colors */
+  --border-primary: #2a2a2a;
+  --border-secondary: #333333;
+
+  /* Status colors */
+  --success: #10b981;
+  --error: #dc3545;
+  --warning: #ffc107;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.7);
+  --shadow-glow: 0 0 20px var(--accent-glow);
+
+  /* Fonts */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+  --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  /* Border radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.2s ease;
+  --transition-slow: 0.3s ease;
+}
