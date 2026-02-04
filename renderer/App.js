@@ -9,13 +9,26 @@ function App() {
   const [historyIndex, setHistoryIndex] = useState(-1);
 
   const openFolder = (folder) => {
-    setCurrentFolder(folder);
-    setCurrentView('dashboard');
+    if (currentFolder && currentFolder.id === folder.id) {
+      setCurrentView('dashboard');
+      return;
+    }
 
-    const newHistory = folderHistory.slice(0, historyIndex + 1);
-    newHistory.push(folder);
-    setFolderHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
+    const existingIndex = folderHistory.findIndex(f => f.id === folder.id);
+
+    if (existingIndex !== -1 && existingIndex <= historyIndex) {
+      setHistoryIndex(existingIndex);
+      setCurrentFolder(folderHistory[existingIndex]);
+      setCurrentView('dashboard');
+    } else {
+      setCurrentFolder(folder);
+      setCurrentView('dashboard');
+
+      const newHistory = folderHistory.slice(0, historyIndex + 1);
+      newHistory.push(folder);
+      setFolderHistory(newHistory);
+      setHistoryIndex(newHistory.length - 1);
+    }
   };
 
   const goHome = () => {
