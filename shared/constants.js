@@ -9,6 +9,15 @@ const IPC_CHANNELS = {
   FOLDER_REMOVE: 'folder:remove',
   FOLDER_VALIDATE_GIT: 'folder:validate-git',
 
+  WORKTREE_INIT_MAIN: 'worktree:init-main',
+  WORKTREE_LIST: 'worktree:list',
+  WORKTREE_CREATE: 'worktree:create',
+  WORKTREE_DELETE: 'worktree:delete',
+  WORKTREE_VALIDATE_NAME: 'worktree:validate-name',
+  WORKTREE_GET_ACTIVE_PATH: 'worktree:get-active-path',
+  WORKTREE_SET_ACTIVE: 'worktree:set-active',
+  WORKTREE_CLEANUP: 'worktree:cleanup',
+
   APP_GET_VERSION: 'app:get-version',
   APP_QUIT: 'app:quit'
 };

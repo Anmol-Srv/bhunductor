@@ -26,13 +26,47 @@ class Folder {
     }
   }
 
+  /**
+   * Get the main repository path (not a worktree)
+   * If folderPath is a worktree, returns the main repo path
+   * Otherwise returns the folderPath as-is
+   */
+  static getMainRepoPath(folderPath) {
+    try {
+      // Get the git common directory (points to main repo's .git)
+      const gitCommonDir = execSync('git rev-parse --git-common-dir', {
+        cwd: folderPath,
+        stdio: 'pipe',
+        encoding: 'utf-8'
+      }).trim();
+
+      // Get the absolute path
+      const absoluteGitDir = path.isAbsolute(gitCommonDir)
+        ? gitCommonDir
+        : path.resolve(folderPath, gitCommonDir);
+
+      // The main repo path is the parent of the .git directory
+      const mainRepoPath = path.dirname(absoluteGitDir);
+
+      console.log(`[Folder] Main repo path for ${folderPath}: ${mainRepoPath}`);
+      return mainRepoPath;
+    } catch (error) {
+      console.error('[Folder] Error detecting main repo path:', error);
+      // If we can't determine, return the original path
+      return folderPath;
+    }
+  }
+
   static create(folderPath) {
     if (!this.isGitRepo(folderPath)) {
       throw new Error('Path is not a git repository');
     }
 
+    // Check if this is a worktree and get the main repo path
+    const actualPath = this.getMainRepoPath(folderPath);
+
     const db = getDatabase();
-    const name = path.basename(folderPath);
+    const name = path.basename(actualPath);
     const id = uuidv4();
 
     try {
@@ -41,10 +75,10 @@ class Folder {
         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
       `);
 
-      stmt.run(id, folderPath, name);
-      console.log(`[Folder] Created: ${folderPath}`);
+      stmt.run(id, actualPath, name);
+      console.log(`[Folder] Created: ${actualPath}`);
 
-      return this.findByPath(folderPath);
+      return this.findByPath(actualPath);
     } catch (error) {
       console.error('[Folder] Error creating:', error);
       throw error;
@@ -76,13 +110,16 @@ class Folder {
       throw new Error('Path is not a git repository');
     }
 
-    const existing = this.findByPath(folderPath);
+    // Always use the main repo path, not a worktree path
+    const actualPath = this.getMainRepoPath(folderPath);
+
+    const existing = this.findByPath(actualPath);
 
     if (existing) {
-      this.updateLastOpened(folderPath);
-      return this.findByPath(folderPath);
+      this.updateLastOpened(actualPath);
+      return this.findByPath(actualPath);
     } else {
-      return this.create(folderPath);
+      return this.create(actualPath);
     }
   }
 
@@ -196,6 +233,13 @@ class Folder {
       console.error('[Folder] Error parsing metadata:', error);
       return null;
     }
+  }
+
+  static updateActiveWorktree(folderId, worktreeId) {
+    const db = getDatabase();
+    const stmt = db.prepare('UPDATE folders SET active_worktree_id = ? WHERE id = ?');
+    const result = stmt.run(worktreeId, folderId);
+    return result.changes > 0;
   }
 }
 

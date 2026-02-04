@@ -1,6 +1,7 @@
 const { ipcMain, dialog, app } = require('electron');
 const { IPC_CHANNELS } = require('../shared/constants');
 const Folder = require('./data/models/Folder');
+const Worktree = require('./data/models/Worktree');
 
 /**
  * Register all IPC handlers
@@ -105,6 +106,77 @@ function registerIPCHandlers(configManager) {
 
   ipcMain.handle(IPC_CHANNELS.APP_QUIT, () => {
     app.quit();
+  });
+
+  // Worktree handlers
+  ipcMain.handle(IPC_CHANNELS.WORKTREE_INIT_MAIN, async (event, folderId, folderPath) => {
+    try {
+      const worktree = Worktree.initializeMainBranch(folderId, folderPath);
+      return { success: true, worktree };
+    } catch (error) {
+      console.error('[IPC] Error initializing main branch:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.WORKTREE_LIST, async (event, folderId) => {
+    try {
+      const worktrees = Worktree.listWorktrees(folderId);
+      return { success: true, worktrees };
+    } catch (error) {
+      console.error('[IPC] Error listing worktrees:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.WORKTREE_CREATE, async (event, folderId, folderPath, branchName) => {
+    try {
+      const worktree = Worktree.createWorktree(folderId, folderPath, branchName);
+      return { success: true, worktree };
+    } catch (error) {
+      console.error('[IPC] Error creating worktree:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.WORKTREE_DELETE, async (event, worktreeId) => {
+    try {
+      const result = Worktree.deleteWorktree(worktreeId);
+      return { success: true };
+    } catch (error) {
+      console.error('[IPC] Error deleting worktree:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.WORKTREE_VALIDATE_NAME, async (event, branchName) => {
+    try {
+      const validation = Worktree.validateBranchName(branchName);
+      return validation;
+    } catch (error) {
+      console.error('[IPC] Error validating branch name:', error);
+      return { valid: false, error: 'Validation failed' };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.WORKTREE_SET_ACTIVE, async (event, folderId, worktreeId) => {
+    try {
+      Worktree.setActiveWorktree(folderId, worktreeId);
+      return { success: true };
+    } catch (error) {
+      console.error('[IPC] Error setting active worktree:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.WORKTREE_CLEANUP, async (event, folderId, folderPath) => {
+    try {
+      const result = Worktree.cleanupAndReinitialize(folderId, folderPath);
+      return { success: true, result };
+    } catch (error) {
+      console.error('[IPC] Error cleaning up worktrees:', error);
+      return { success: false, error: error.message };
+    }
   });
 
   console.log('[IPC] Handlers registered');

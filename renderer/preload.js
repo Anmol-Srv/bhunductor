@@ -9,6 +9,14 @@ const ALLOWED_CHANNELS = [
   'folder:add',
   'folder:remove',
   'folder:validate-git',
+  'worktree:init-main',
+  'worktree:list',
+  'worktree:create',
+  'worktree:delete',
+  'worktree:validate-name',
+  'worktree:get-active-path',
+  'worktree:set-active',
+  'worktree:cleanup',
   'app:get-version',
   'app:quit'
 ];
