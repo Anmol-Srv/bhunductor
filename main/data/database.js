@@ -65,6 +65,19 @@ function initializeSchema() {
 
     CREATE INDEX IF NOT EXISTS idx_worktrees_folder_id ON worktrees(folder_id);
 
+    CREATE TABLE IF NOT EXISTS claude_sessions (
+      id TEXT PRIMARY KEY,
+      folder_id TEXT NOT NULL,
+      worktree_id TEXT,
+      status TEXT DEFAULT 'active',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE CASCADE,
+      FOREIGN KEY (worktree_id) REFERENCES worktrees(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_claude_sessions_folder
+      ON claude_sessions(folder_id);
+
     CREATE TABLE IF NOT EXISTS migrations (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,

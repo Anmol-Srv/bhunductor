@@ -63,11 +63,11 @@ app.whenReady().then(() => {
   getDatabase();
   Folder.cleanupInvalid();
 
-  // Register IPC handlers
-  registerIPCHandlers(configManager);
-
   // Create window
   createWindow();
+
+  // Register IPC handlers (after window creation for Claude integration)
+  registerIPCHandlers(configManager, mainWindow);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

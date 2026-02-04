@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PanelLeftClose, PanelLeft, Plus } from 'lucide-react';
+import { PanelLeftClose, PanelLeft, Plus, Sparkles } from 'lucide-react';
 import BranchItem from './BranchItem';
 
 function Sidebar({
@@ -9,7 +9,8 @@ function Sidebar({
   activeWorktree,
   onSelectBranch,
   onCreateBranch,
-  onDeleteBranch
+  onDeleteBranch,
+  onStartSession
 }) {
   const [menuOpen, setMenuOpen] = useState(null);
 
@@ -17,9 +18,23 @@ function Sidebar({
     <div className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
       {!collapsed && (
         <div className="sidebar-content">
-          <div className="sidebar-header">
-            <span>Branches</span>
-            <div className="header-actions">
+          <div className="sidebar-section">
+            <div className="sidebar-header">
+              <span>Claude</span>
+            </div>
+            <button
+              className="start-session-btn"
+              onClick={onStartSession}
+            >
+              <Sparkles size={16} />
+              <span>Start Session</span>
+            </button>
+          </div>
+
+          <div className="sidebar-section">
+            <div className="sidebar-header">
+              <span>Branches</span>
+              <div className="header-actions">
               <button
                 className="add-branch-btn"
                 onClick={onCreateBranch}
@@ -31,9 +46,9 @@ function Sidebar({
                 <PanelLeftClose size={16} />
               </button>
             </div>
-          </div>
+            </div>
 
-          <div className="branch-list">
+            <div className="branch-list">
             {worktrees.map(worktree => (
               <BranchItem
                 key={worktree.id}
@@ -45,6 +60,7 @@ function Sidebar({
                 onMenuToggle={() => setMenuOpen(menuOpen === worktree.id ? null : worktree.id)}
               />
             ))}
+            </div>
           </div>
         </div>
       )}

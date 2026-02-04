@@ -13,11 +13,14 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [activeSessions, setActiveSessions] = useState([]);
+  const [currentSessionId, setCurrentSessionId] = useState(null);
 
   // Load worktrees on mount and when folder changes
   useEffect(() => {
     if (folder) {
       initializeWorktrees();
+      loadSessions();
     }
   }, [folder]);
 
@@ -114,6 +117,45 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
     setSidebarCollapsed(!sidebarCollapsed);
   };
 
+  const loadSessions = async () => {
+    const result = await window.electron.invoke('claude:session-list', folder.id);
+    if (result.success) {
+      setActiveSessions(result.sessions);
+    }
+  };
+
+  const handleStartSession = async () => {
+    if (!activeWorktree) {
+      console.error('No active worktree selected');
+      return;
+    }
+
+    console.log('[Dashboard] Starting Claude session...', { folderId: folder.id, worktreeId: activeWorktree.id });
+    const result = await window.electron.invoke('claude:session-start', folder.id, activeWorktree.id);
+
+    console.log('[Dashboard] Session start result:', result);
+
+    if (result.success) {
+      console.log('[Dashboard] Session created:', result.session);
+      setActiveSessions([...activeSessions, result.session]);
+      setCurrentSessionId(result.session.sessionId);
+      console.log('[Dashboard] Updated activeSessions, currentSessionId:', result.session.sessionId);
+    } else {
+      console.error('[Dashboard] Failed to start session:', result.error);
+      alert(`Failed to start Claude session: ${result.error}`);
+    }
+  };
+
+  const handleStopSession = async (sessionId) => {
+    const result = await window.electron.invoke('claude:session-stop', sessionId);
+    if (result.success) {
+      setActiveSessions(activeSessions.filter(s => s.sessionId !== sessionId));
+      if (currentSessionId === sessionId) {
+        setCurrentSessionId(activeSessions[0]?.sessionId || null);
+      }
+    }
+  };
+
   return (
     <div className="dashboard">
       <Header
@@ -135,9 +177,15 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
           onSelectBranch={handleSelectBranch}
           onCreateBranch={() => setShowCreateModal(true)}
           onDeleteBranch={handleDeleteBranch}
+          onStartSession={handleStartSession}
         />
 
-        <MainContent />
+        <MainContent
+          currentSessionId={currentSessionId}
+          activeSessions={activeSessions}
+          onSwitchSession={setCurrentSessionId}
+          onStopSession={handleStopSession}
+        />
 
         <RightPanel />
       </div>
