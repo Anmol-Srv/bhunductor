@@ -3,12 +3,42 @@ const { getDatabase } = require('../data/database');
 const Worktree = require('../data/models/Worktree');
 const Folder = require('../data/models/Folder');
 const ClaudeProcess = require('./ClaudeProcess');
+const PermissionHttpServer = require('../mcp/PermissionHttpServer');
 
 class ClaudeSessionManager {
   constructor(mainWindow) {
     this.mainWindow = mainWindow;
     this.activeSessions = new Map(); // sessionId -> ClaudeProcess
     this.pendingPermissions = new Map(); // requestId -> { sessionId, resolve }
+
+    // Start HTTP server for MCP permission requests
+    this.permissionServer = new PermissionHttpServer(58472);
+    this.permissionServer.onPermissionRequest = (requestId, permissionData) => {
+      this.handleMcpPermissionRequest(requestId, permissionData);
+    };
+
+    this.permissionServer.start().catch((error) => {
+      console.error('[SessionManager] Failed to start permission HTTP server:', error);
+    });
+  }
+
+  /**
+   * Handle permission request from MCP server
+   */
+  handleMcpPermissionRequest(requestId, permissionData) {
+    console.log('[SessionManager] Received MCP permission request:', requestId, permissionData);
+
+    // Send to renderer
+    this.mainWindow.webContents.send('claude:permission-request', {
+      ...permissionData,
+      requestId
+    });
+
+    // Store mapping for later response
+    this.pendingPermissions.set(requestId, {
+      isMcp: true,
+      toolUseId: permissionData.toolUseId
+    });
   }
 
   createSession(folderId, worktreeId) {
@@ -34,8 +64,12 @@ class ClaudeSessionManager {
           ...data,
           requestId
         });
-        // Store for later response
-        this.pendingPermissions.set(requestId, { sessionId, process });
+        // Store for later response, including toolUseId
+        this.pendingPermissions.set(requestId, {
+          sessionId,
+          process,
+          toolUseId: data.toolUseId
+        });
       },
       onError: (data) => {
         this.mainWindow.webContents.send('claude:session-error', data);
@@ -72,7 +106,16 @@ class ClaudeSessionManager {
       throw new Error(`Permission request ${requestId} not found`);
     }
 
-    pending.process.sendPermissionResponse(approved);
+    console.log(`[SessionManager] Responding to permission ${requestId}: ${approved ? 'APPROVED' : 'DENIED'}`);
+
+    if (pending.isMcp) {
+      // MCP-based permission - respond via HTTP server
+      this.permissionServer.respondToPermission(requestId, approved);
+    } else {
+      // Legacy control message based permission (fallback)
+      pending.process.sendPermissionResponse(approved, pending.toolUseId);
+    }
+
     this.pendingPermissions.delete(requestId);
   }
 
@@ -117,6 +160,24 @@ class ClaudeSessionManager {
       ...session,
       sessionId: session.id
     }));
+  }
+
+  /**
+   * Cleanup when session manager is destroyed
+   */
+  destroy() {
+    // Stop all active sessions
+    for (const [sessionId, process] of this.activeSessions) {
+      process.stop();
+    }
+    this.activeSessions.clear();
+
+    // Stop HTTP server
+    if (this.permissionServer) {
+      this.permissionServer.stop().catch((error) => {
+        console.error('[SessionManager] Error stopping permission server:', error);
+      });
+    }
   }
 }
 

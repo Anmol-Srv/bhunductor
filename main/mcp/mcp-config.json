@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "bhunductor-permissions": {
+      "command": "node",
+      "args": [
+        "/Users/anmol/Drive/Projects/Bhunductor/main/mcp/permission-server.js"
+      ],
+      "env": {
+        "ELECTRON_PERMISSION_PORT": "58472"
+      }
+    }
+  }
+}
