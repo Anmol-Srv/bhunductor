@@ -257,15 +257,16 @@ body {
 }
 
 .sidebar-header {
-  padding: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
   border-bottom: 1px solid var(--border-primary);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  color: var(--text-secondary);
-  font-size: 13px;
+  color: var(--text-tertiary);
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1px;
+  flex-shrink: 0;
 }
 
 .collapse-btn,
@@ -300,9 +301,9 @@ body {
 .main-content {
   flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
   background: var(--bg-primary);
+  overflow: hidden;
 }
 
 .placeholder {
@@ -379,42 +380,131 @@ body {
   padding: var(--spacing-xs);
 }
 
-.branch-item {
+/* Collapsible branch container */
+.branch-item-container {
+  margin-bottom: var(--spacing-xs);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.branch-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: var(--spacing-sm);
-  margin-bottom: var(--spacing-xs);
   border-radius: 6px;
   cursor: pointer;
   transition: background-color 0.2s ease;
   position: relative;
+  gap: var(--spacing-xs);
 }
 
-.branch-item:hover {
+.branch-header:hover {
   background-color: var(--bg-tertiary);
 }
 
-.branch-item.active {
-  background-color: var(--accent-primary);
-  color: var(--text-primary);
+.branch-item-container.active .branch-header {
+  background-color: var(--bg-tertiary);
 }
 
-.branch-content {
+.branch-chevron {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  flex: 1;
-  min-width: 0;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
 }
 
 .branch-icon {
   flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.branch-item-container.active .branch-icon {
   color: var(--accent-primary);
 }
 
-.branch-item.active .branch-icon {
+.session-count {
+  font-size: 10px;
+  min-width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--accent-primary);
   color: var(--text-primary);
+  border-radius: 8px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* Session list under branch */
+.branch-sessions {
+  padding: 2px 0 4px 28px;
+}
+
+.session-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: background-color 0.15s ease;
+}
+
+.session-item:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.session-item.open {
+  color: var(--text-primary);
+}
+
+.session-icon {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.session-item.open .session-icon {
+  color: var(--accent-primary);
+}
+
+.session-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-open-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.new-session-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.new-session-btn:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--accent-primary);
 }
 
 .branch-name {
@@ -426,13 +516,13 @@ body {
 }
 
 .main-badge {
-  font-size: 10px;
-  padding: 2px 6px;
-  background-color: var(--accent-secondary);
-  border-radius: 4px;
-  text-transform: uppercase;
-  font-weight: 600;
-  letter-spacing: 0.5px;
+  font-size: 9px;
+  padding: 1px 4px;
+  background-color: var(--bg-hover);
+  color: var(--text-tertiary);
+  border-radius: 3px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
 }
 
 .branch-actions {
@@ -709,45 +799,89 @@ body {
   background-color: var(--bg-primary);
 }
 
-/* Session Tabs */
-.session-tabs {
+/* Tab Bar (MainContent) */
+.tab-bar {
   display: flex;
-  gap: 4px;
-  padding: 8px;
+  gap: 2px;
+  padding: 6px 8px;
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-primary);
   overflow-x: auto;
+  flex-shrink: 0;
 }
 
-.session-tab {
+.tab-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
-  background-color: var(--bg-primary);
-  border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  padding: 5px 10px;
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   white-space: nowrap;
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
 }
 
-.session-tab.active {
-  background-color: var(--accent-primary);
+.tab-item:hover {
+  background-color: var(--bg-tertiary);
   color: var(--text-primary);
 }
 
-.close-tab {
+.tab-item.active {
+  background-color: var(--bg-primary);
+  border-color: var(--border-primary);
+  color: var(--text-primary);
+}
+
+.tab-label {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-close {
   background: none;
   border: none;
-  color: inherit;
+  color: var(--text-tertiary);
   cursor: pointer;
   padding: 2px;
   border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
 }
 
-.close-tab:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+.tab-close:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Tab content area */
+.tab-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+}
+
+.tab-panel {
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Close confirmation modal */
+.close-modal {
+  max-width: 380px;
+}
+
+.close-modal .modal-body p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
 }
 
 /* Message List */
@@ -849,9 +983,12 @@ body {
   cursor: not-allowed;
 }
 
-/* Start Session Button */
+/* Sidebar Section */
 .sidebar-section {
-  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
 }
 
 .start-session-btn {
@@ -880,7 +1017,7 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
+  flex: 1;
   color: var(--text-secondary);
 }
 

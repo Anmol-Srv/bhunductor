@@ -1,4 +1,4 @@
-const http = require('http');
+const Fastify = require('fastify');
 
 /**
  * HTTP Server for receiving permission requests from MCP server
@@ -10,106 +10,72 @@ const http = require('http');
 class PermissionHttpServer {
   constructor(port = 58472) {
     this.port = port;
-    this.server = null;
     this.pendingRequests = new Map();
     this.requestTimeoutMs = 300000;
+    this.fastify = null;
   }
 
   start() {
-    return new Promise((resolve, reject) => {
-      this.server = http.createServer((req, res) => {
-        if (req.method === 'POST' && req.url === '/permission-request') {
-          this.handlePermissionRequest(req, res);
-        } else {
-          res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Not found' }));
-        }
-      });
+    this.fastify = Fastify({ logger: false });
 
-      this.server.on('error', (error) => {
-        if (error.code === 'EADDRINUSE') {
-          reject(error);
+    this.fastify.post('/permission-request', {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['tool_use_id'],
+          properties: {
+            tool_use_id: { type: 'string' },
+            tool: { type: 'string' },
+            input: { type: 'object' },
+            session_id: { type: 'string' }
+          },
+          additionalProperties: true
         }
-      });
+      }
+    }, (request, reply) => this.handlePermissionRequest(request, reply));
 
-      this.server.listen(this.port, 'localhost', () => {
-        resolve();
-      });
+    this.fastify.setNotFoundHandler((request, reply) => {
+      reply.code(404).send({ error: 'Not found' });
     });
+
+    this.fastify.setErrorHandler((error, request, reply) => {
+      if (error.validation) {
+        reply.code(400).send({ error: error.message, approved: false });
+        return;
+      }
+      reply.code(500).send({ error: error.message, approved: false });
+    });
+
+    return this.fastify.listen({ port: this.port, host: 'localhost' });
   }
 
-  handlePermissionRequest(req, res) {
+  async handlePermissionRequest(request, reply) {
+    const permissionData = request.body;
+    const requestId = permissionData.tool_use_id;
 
-    let body = '';
-
-    req.on('data', (chunk) => {
-      body += chunk.toString();
+    console.log('[PermissionHttpServer] received permission request:', {
+      requestId,
+      tool: permissionData.tool,
+      sessionId: permissionData.session_id
     });
 
-    req.on('end', async () => {
-      try {
-        const permissionData = JSON.parse(body || '{}');
-        if (!permissionData || typeof permissionData !== 'object') {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Invalid permission request', approved: false }));
-          return;
-        }
+    if (this.onPermissionRequest) {
+      this.onPermissionRequest(requestId, permissionData);
+    }
 
-        if (!permissionData.tool_use_id) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Invalid permission request, tool_use_id is required', approved: false }));
-          return;
-        }
-        const requestId = permissionData.tool_use_id;
-        console.log('[PermissionHttpServer] received permission request:', {
-          requestId,
-          tool: permissionData.tool,
-          sessionId: permissionData.session_id
-        });
+    const result = await new Promise((resolve) => {
+      const timeoutId = setTimeout(() => {
+        this.respondToPermission(requestId, false, 'Permission request timed out');
+      }, this.requestTimeoutMs);
 
-        const responsePromise = new Promise((resolve) => {
-          const timeoutId = setTimeout(() => {
-            this.respondToPermission(requestId, false, 'Permission request timed out');
-          }, this.requestTimeoutMs);
-
-          this.pendingRequests.set(requestId, {
-            resolve,
-            res,
-            timeoutId,
-            createdAt: Date.now()
-          });
-        });
-
-        if (this.onPermissionRequest) {
-          this.onPermissionRequest(requestId, permissionData);
-        }
-
-        res.on('close', () => {
-          const pending = this.pendingRequests.get(requestId);
-          if (pending && pending.res === res) {
-            clearTimeout(pending.timeoutId);
-            this.pendingRequests.delete(requestId);
-            console.warn('[PermissionHttpServer] response closed before decision:', {
-              requestId
-            });
-          }
-        });
-
-        res.on('finish', () => {
-          const pending = this.pendingRequests.get(requestId);
-          if (pending && pending.res === res) {
-            clearTimeout(pending.timeoutId);
-            this.pendingRequests.delete(requestId);
-          }
-        });
-
-        await responsePromise;
-
-      } catch (error) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: error.message, approved: false }));
-      }
+      this.pendingRequests.set(requestId, {
+        resolve,
+        timeoutId,
+        createdAt: Date.now()
+      });
     });
+
+    return result;
   }
 
   respondToPermission(requestId, approved, message) {
@@ -123,34 +89,29 @@ class PermissionHttpServer {
       return false;
     }
 
-    const { resolve, res, timeoutId } = pending;
+    console.log('[PermissionHttpServer] responding to MCP with decision:', {
+      requestId,
+      approved,
+      message
+    });
 
-    if (!res.writableEnded) {
-      console.log('[PermissionHttpServer] responding to MCP with decision:', {
-        requestId,
-        approved,
-        message
-      });
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ approved, message }));
-    }
-
-    resolve();
-    clearTimeout(timeoutId);
+    clearTimeout(pending.timeoutId);
     this.pendingRequests.delete(requestId);
+    pending.resolve({ approved, message });
     return true;
   }
 
-  stop() {
-    return new Promise((resolve) => {
-      if (this.server) {
-        this.server.close(() => {
-          resolve();
-        });
-      } else {
-        resolve();
-      }
-    });
+  async stop() {
+    // Deny all pending requests before shutting down
+    for (const [requestId, pending] of this.pendingRequests) {
+      clearTimeout(pending.timeoutId);
+      pending.resolve({ approved: false, message: 'Server shutting down' });
+    }
+    this.pendingRequests.clear();
+
+    if (this.fastify) {
+      await this.fastify.close();
+    }
   }
 }
 

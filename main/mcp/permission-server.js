@@ -13,8 +13,6 @@ const {
   ListToolsRequestSchema,
   CallToolRequestSchema,
 } = require('@modelcontextprotocol/sdk/types.js');
-const http = require('http');
-
 // Configuration - port where Electron app listens for permission requests
 const ELECTRON_PORT = process.env.ELECTRON_PERMISSION_PORT || 58472;
 const SESSION_ID = process.env.SESSION_ID;
@@ -163,61 +161,38 @@ class PermissionMCPServer {
    * Request permission from Electron app via HTTP
    */
   async requestPermissionFromElectron(permissionData) {
-    return new Promise((resolve, reject) => {
-      const postData = JSON.stringify(permissionData);
+    const url = `http://localhost:${ELECTRON_PORT}/permission-request`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 300000);
 
-      console.log('[MCP Server in requestPermissionFromElectron] Sending to Electron:', JSON.stringify(postData, null, 2));
+    console.log('[MCP Server in requestPermissionFromElectron] Sending to Electron:', JSON.stringify(permissionData, null, 2));
 
-      const options = {
-        hostname: 'localhost',
-        port: ELECTRON_PORT,
-        path: '/permission-request',
+    try {
+      const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(postData),
-        },
-        timeout: 300000, // 5 minutes timeout for user response
-      };
-
-      const req = http.request(options, (res) => {
-        let data = '';
-
-        res.on('data', (chunk) => {
-          data += chunk;
-        });
-
-        res.on('end', () => {
-          try {
-            const response = JSON.parse(data);
-            console.log('[MCP Server in requestPermissionFromElectron] Received response from Electron:', JSON.stringify(response, null, 2));
-            if (typeof response === 'boolean') {
-              resolve({ approved: response });
-              return;
-            }
-            if (response && typeof response === 'object') {
-              resolve(response);
-              return;
-            }
-            reject(new Error('Invalid response payload from Electron'));
-          } catch (error) {
-            reject(new Error(`Invalid response from Electron: ${error.message}`));
-          }
-        });
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(permissionData),
+        signal: controller.signal
       });
 
-      req.on('error', (error) => {
-        reject(new Error(`Failed to connect to Electron app: ${error.message}`));
-      });
+      const response = await res.json();
+      console.log('[MCP Server in requestPermissionFromElectron] Received response from Electron:', JSON.stringify(response, null, 2));
 
-      req.on('timeout', () => {
-        req.destroy();
-        reject(new Error('Permission request timed out'));
-      });
-
-      req.write(postData);
-      req.end();
-    });
+      if (typeof response === 'boolean') {
+        return { approved: response };
+      }
+      if (response && typeof response === 'object') {
+        return response;
+      }
+      throw new Error('Invalid response payload from Electron');
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        throw new Error('Permission request timed out');
+      }
+      throw new Error(`Failed to connect to Electron app: ${error.message}`);
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   async start() {

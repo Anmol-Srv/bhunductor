@@ -4,11 +4,8 @@ const Folder = require('./data/models/Folder');
 const Worktree = require('./data/models/Worktree');
 const ClaudeSessionManager = require('./claude/ClaudeSessionManager');
 
-/**
- * Register all IPC handlers
- */
 function registerIPCHandlers(configManager, mainWindow) {
-  // Initialize Claude session manager
+
   const claudeManager = new ClaudeSessionManager(mainWindow);
   ipcMain.handle(IPC_CHANNELS.CONFIG_GET, (event, key) => {
     try {
@@ -203,9 +200,9 @@ function registerIPCHandlers(configManager, mainWindow) {
     }
   });
 
-  ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_LIST, async (event, folderId) => {
+  ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_LIST, async (event, folderId, worktreeId) => {
     try {
-      const sessions = claudeManager.listSessions(folderId);
+      const sessions = claudeManager.listSessions(folderId, worktreeId);
       return { success: true, sessions };
     } catch (error) {
       console.error('[IPC] Error listing Claude sessions:', error);

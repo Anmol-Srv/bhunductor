@@ -181,6 +181,33 @@ function runMigrations() {
     console.log(`[Database] Migration already applied: ${MIGRATION_FIX_WORKTREES}`);
   }
 
+  // Migration 2: Add claude_session_id column to claude_sessions table
+  const MIGRATION_ADD_CLAUDE_SESSION_ID = 'add_claude_session_id_to_claude_sessions';
+
+  if (!hasMigrationRun(MIGRATION_ADD_CLAUDE_SESSION_ID)) {
+    console.log(`[Database] Running migration: ${MIGRATION_ADD_CLAUDE_SESSION_ID}`);
+
+    try {
+      const tableInfo = db.pragma('table_info(claude_sessions)');
+      const hasColumn = tableInfo.some(col => col.name === 'claude_session_id');
+
+      if (!hasColumn) {
+        console.log('[Database] Adding claude_session_id column to claude_sessions table...');
+        db.exec('ALTER TABLE claude_sessions ADD COLUMN claude_session_id TEXT');
+        console.log('[Database] Column added successfully');
+      } else {
+        console.log('[Database] Column claude_session_id already exists, skipping');
+      }
+
+      markMigrationApplied(MIGRATION_ADD_CLAUDE_SESSION_ID);
+      console.log(`[Database] Migration completed: ${MIGRATION_ADD_CLAUDE_SESSION_ID}`);
+    } catch (error) {
+      console.error(`[Database] Migration failed: ${MIGRATION_ADD_CLAUDE_SESSION_ID}`, error);
+    }
+  } else {
+    console.log(`[Database] Migration already applied: ${MIGRATION_ADD_CLAUDE_SESSION_ID}`);
+  }
+
   console.log('[Database] Migrations complete');
 }
 

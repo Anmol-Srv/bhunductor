@@ -1,48 +1,44 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send } from 'lucide-react';
+import { Send } from 'lucide-react';
 import PermissionPrompt from './PermissionPrompt';
 
-function ClaudeChat({ sessionId, activeSessions, onSwitchSession, onStopSession }) {
-  const [messages, setMessages] = useState([]);
+// Module-level cache: survives component mount/unmount cycles
+const messageCache = new Map();
+
+function ClaudeChat({ sessionId }) {
+  const [messages, setMessages] = useState(() => messageCache.get(sessionId) || []);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState('');
   const [permissionQueue, setPermissionQueue] = useState([]);
   const messagesEndRef = useRef(null);
-  const visibleSessions = activeSessions.filter(session => {
-    const sessId = session.sessionId || session.id;
-    return sessId === sessionId;
-  });
 
   useEffect(() => {
     const unsubscribeChunk = window.electron.on('claude:message-chunk', (data) => {
-      if (data.sessionId === sessionId) {
-        setIsStreaming(true);
-        setStreamingMessage(prev => prev + data.text);
-      }
+      if (data?.sessionId !== sessionId) return;
+      setIsStreaming(true);
+      setStreamingMessage(prev => prev + (data?.text || ''));
     });
 
     const unsubscribeComplete = window.electron.on('claude:message-complete', (data) => {
-      if (data.sessionId === sessionId) {
-        setIsStreaming(false);
-        // Use functional update to get the latest streamingMessage value
-        setStreamingMessage(currentMsg => {
-          if (currentMsg) {
-            setMessages(prev => [...prev, { role: 'assistant', text: currentMsg }]);
-          }
-          return '';
-        });
-      }
+      if (data?.sessionId !== sessionId) return;
+      setIsStreaming(false);
+      setStreamingMessage(currentMsg => {
+        if (currentMsg) {
+          setMessages(prev => [...prev, { role: 'assistant', text: currentMsg }]);
+        }
+        return '';
+      });
     });
 
     const unsubscribePermission = window.electron.on('claude:permission-request', (data) => {
+      if (data?.session_id !== sessionId && data?.sessionId !== sessionId) return;
       setPermissionQueue(prev => [...prev, data]);
     });
 
     const unsubscribeError = window.electron.on('claude:session-error', (data) => {
-      if (data.sessionId === sessionId) {
-        alert(`Claude Error: ${data.error}`);
-      }
+      if (data?.sessionId !== sessionId) return;
+      alert(`Claude Error: ${data.error}`);
     });
 
     return () => {
@@ -52,6 +48,11 @@ function ClaudeChat({ sessionId, activeSessions, onSwitchSession, onStopSession 
       unsubscribeError();
     };
   }, [sessionId]);
+
+  // Sync messages to module-level cache
+  useEffect(() => {
+    messageCache.set(sessionId, messages);
+  }, [sessionId, messages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -64,7 +65,6 @@ function ClaudeChat({ sessionId, activeSessions, onSwitchSession, onStopSession 
     setInput('');
     setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
 
-    console.log('[ClaudeChat] user sent a message:', userMessage);
     const result = await window.electron.invoke('claude:send-message', sessionId, userMessage);
     if (!result.success) {
       alert(`Failed to send message: ${result.error}`);
@@ -72,25 +72,15 @@ function ClaudeChat({ sessionId, activeSessions, onSwitchSession, onStopSession 
   };
 
   const activePermission = permissionQueue[0] || null;
-  if (activePermission) {
-    console.log('[ClaudeChat] permission json passed to claude chat:', activePermission);
-  }
 
   const handlePermissionResponse = async (approved) => {
-    if (!activePermission) {
-      return;
-    }
+    if (!activePermission) return;
 
-    console.log('[ClaudeChat] responding to permission request:', {
-      requestId: activePermission.requestId,
-      approved
-    });
     const result = await window.electron.invoke(
       'claude:permission-respond',
       activePermission.requestId,
       approved
     );
-    console.log('[ClaudeChat] permission response result:', result);
     if (result.success) {
       setPermissionQueue(prev => prev.slice(1));
     }
@@ -98,34 +88,6 @@ function ClaudeChat({ sessionId, activeSessions, onSwitchSession, onStopSession 
 
   return (
     <div className="claude-chat">
-      <div className="session-tabs">
-        {visibleSessions.map(session => {
-          const sessId = session.sessionId || session.id;
-          if (!sessId) {
-            return null;
-          }
-
-          return (
-            <div
-              key={sessId}
-              className={`session-tab ${sessId === sessionId ? 'active' : ''}`}
-              onClick={() => onSwitchSession(sessId)}
-            >
-              <span>Session {sessId.slice(0, 8)}</span>
-              <button
-                className="close-tab"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStopSession(sessId);
-                }}
-              >
-                <X size={14} />
-              </button>
-            </div>
-          );
-        })}
-      </div>
-
       <div className="message-list">
         {messages.map((msg, idx) => (
           <div key={idx} className={`message ${msg.role}`}>
@@ -177,5 +139,8 @@ function ClaudeChat({ sessionId, activeSessions, onSwitchSession, onStopSession 
     </div>
   );
 }
+
+// Clear cache entry when a session is fully stopped
+ClaudeChat.clearCache = (sessionId) => messageCache.delete(sessionId);
 
 export default ClaudeChat;

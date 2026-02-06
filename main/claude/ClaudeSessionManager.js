@@ -70,12 +70,26 @@ class ClaudeSessionManager {
   createSession(folderId, worktreeId) {
     const sessionId = uuidv4();
 
-    // Get working directory - use main folder path, not worktree path
+    // Get working directory - use worktree-specific path
     const folder = Folder.findById(folderId);
-    const workingDir = folder.path;
+    const worktree = Worktree.findById(worktreeId);
+    const workingDir = worktree
+      ? Worktree.getActivePath(worktree, folder)
+      : folder.path;
+
+    // Check for previous session to resume
+    const options = {};
+    const lastSession = this.getLastSessionForWorktree(folderId, worktreeId);
+    if (lastSession && lastSession.claude_session_id) {
+      options.resumeSessionId = lastSession.claude_session_id;
+      console.log(`[ClaudeSessionManager] Resuming session with Claude ID: ${lastSession.claude_session_id}`);
+    } else if (lastSession) {
+      options.continueSession = true;
+      console.log('[ClaudeSessionManager] Continuing previous session');
+    }
 
     // Create subprocess
-    const process = new ClaudeProcess(sessionId, workingDir, {
+    const claudeProcess = new ClaudeProcess(sessionId, workingDir, {
       onChunk: (data) => {
         this.mainWindow.webContents.send('claude:message-chunk', data);
       },
@@ -87,11 +101,14 @@ class ClaudeSessionManager {
       },
       onExit: (code) => {
         this.handleSessionExit(sessionId, code);
+      },
+      onSystemInfo: ({ sessionId: sid, claudeSessionId }) => {
+        this.handleSystemInfo(sid, claudeSessionId);
       }
-    });
+    }, options);
 
-    process.start();
-    this.activeSessions.set(sessionId, process);
+    claudeProcess.start();
+    this.activeSessions.set(sessionId, claudeProcess);
 
     // Save to database
     const db = getDatabase();
@@ -101,6 +118,30 @@ class ClaudeSessionManager {
     `).run(sessionId, folderId, worktreeId);
 
     return { sessionId, workingDir };
+  }
+
+  /**
+   * Store Claude CLI's own session ID for resume support
+   */
+  handleSystemInfo(sessionId, claudeSessionId) {
+    console.log(`[ClaudeSessionManager] Captured Claude session ID: ${claudeSessionId} for session: ${sessionId}`);
+    const db = getDatabase();
+    db.prepare(`
+      UPDATE claude_sessions SET claude_session_id = ? WHERE id = ?
+    `).run(claudeSessionId, sessionId);
+  }
+
+  /**
+   * Get the most recent completed session for a worktree (for resume)
+   */
+  getLastSessionForWorktree(folderId, worktreeId) {
+    const db = getDatabase();
+    return db.prepare(`
+      SELECT * FROM claude_sessions
+      WHERE folder_id = ? AND worktree_id = ? AND status IN ('stopped', 'exited')
+      ORDER BY created_at DESC
+      LIMIT 1
+    `).get(folderId, worktreeId);
   }
 
   sendMessage(sessionId, message) {
@@ -156,13 +197,23 @@ class ClaudeSessionManager {
     `).run(sessionId);
   }
 
-  listSessions(folderId) {
+  listSessions(folderId, worktreeId = null) {
     const db = getDatabase();
-    const sessions = db.prepare(`
-      SELECT * FROM claude_sessions
-      WHERE folder_id = ? AND status = 'active'
-      ORDER BY created_at DESC
-    `).all(folderId);
+    let sessions;
+
+    if (worktreeId) {
+      sessions = db.prepare(`
+        SELECT * FROM claude_sessions
+        WHERE folder_id = ? AND worktree_id = ? AND status = 'active'
+        ORDER BY created_at DESC
+      `).all(folderId, worktreeId);
+    } else {
+      sessions = db.prepare(`
+        SELECT * FROM claude_sessions
+        WHERE folder_id = ? AND status = 'active'
+        ORDER BY created_at DESC
+      `).all(folderId);
+    }
 
     // Map database 'id' field to 'sessionId' for consistency with created sessions
     return sessions.map(session => ({
