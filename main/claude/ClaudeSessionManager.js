@@ -17,27 +17,53 @@ class ClaudeSessionManager {
       this.handleMcpPermissionRequest(requestId, permissionData);
     };
 
-    this.permissionServer.start().catch((error) => {
-      console.error('[SessionManager] Failed to start permission HTTP server:', error);
-    });
+    this.permissionServer.start().catch(() => { });
   }
 
   /**
    * Handle permission request from MCP server
    */
   handleMcpPermissionRequest(requestId, permissionData) {
-    console.log('[SessionManager] Received MCP permission request:', requestId, permissionData);
+    console.log('[ClaudeSessionManager] claude requested tool permission:', permissionData);
 
-    // Send to renderer
+    // const normalized = {
+    //   tool: permissionData.tool_name || permissionData.toolName,
+    //   input: permissionData.input ?? permissionData.tool_input ?? permissionData.toolInput,
+    //   toolUseId:
+    //     permissionData.toolUseId ||
+    //     permissionData.tool_use_id ||
+    //     permissionData.toolUseID,
+    //   sessionId:
+    //     permissionData.sessionId ||
+    //     permissionData.session_id ||
+    //     permissionData.sessionID
+    // };
+    // const toolUse = {
+    //   id: normalized.toolUseId,
+    //   name: normalized.tool,
+    //   input: normalized.input
+    // };
+
+    // // Send to renderer
+    // const payload = {
+    //   ...permissionData,
+    //   ...normalized,
+    //   toolUse,
+    //   requestId
+    // };
+    // console.log('[ClaudeSessionManager] permission json passed to renderer:', payload);
+
     this.mainWindow.webContents.send('claude:permission-request', {
-      ...permissionData,
-      requestId
+      requestId,
+      ...permissionData
     });
 
-    // Store mapping for later response
     this.pendingPermissions.set(requestId, {
       isMcp: true,
-      toolUseId: permissionData.toolUseId
+      toolUseId: permissionData.tool_use_id,
+      sessionId: permissionData.session_id,
+      input: permissionData.input,
+      createdAt: Date.now()
     });
   }
 
@@ -48,8 +74,6 @@ class ClaudeSessionManager {
     const folder = Folder.findById(folderId);
     const workingDir = folder.path;
 
-    console.log(`[SessionManager] Creating session ${sessionId} in ${workingDir}`);
-
     // Create subprocess
     const process = new ClaudeProcess(sessionId, workingDir, {
       onChunk: (data) => {
@@ -57,19 +81,6 @@ class ClaudeSessionManager {
       },
       onComplete: (data) => {
         this.mainWindow.webContents.send('claude:message-complete', data);
-      },
-      onPermissionRequest: (data) => {
-        const requestId = uuidv4();
-        this.mainWindow.webContents.send('claude:permission-request', {
-          ...data,
-          requestId
-        });
-        // Store for later response, including toolUseId
-        this.pendingPermissions.set(requestId, {
-          sessionId,
-          process,
-          toolUseId: data.toolUseId
-        });
       },
       onError: (data) => {
         this.mainWindow.webContents.send('claude:session-error', data);
@@ -106,15 +117,14 @@ class ClaudeSessionManager {
       throw new Error(`Permission request ${requestId} not found`);
     }
 
-    console.log(`[SessionManager] Responding to permission ${requestId}: ${approved ? 'APPROVED' : 'DENIED'}`);
-
-    if (pending.isMcp) {
-      // MCP-based permission - respond via HTTP server
-      this.permissionServer.respondToPermission(requestId, approved);
-    } else {
-      // Legacy control message based permission (fallback)
-      pending.process.sendPermissionResponse(approved, pending.toolUseId);
-    }
+    // All permissions are now handled via MCP
+    console.log('[ClaudeSessionManager] permission decision:', {
+      requestId,
+      approved,
+      sessionId: pending.sessionId,
+      toolUseId: pending.toolUseId
+    });
+    this.permissionServer.respondToPermission(requestId, approved);
 
     this.pendingPermissions.delete(requestId);
   }
@@ -134,7 +144,6 @@ class ClaudeSessionManager {
   }
 
   handleSessionExit(sessionId, code) {
-    console.log(`[SessionManager] Session ${sessionId} exited with code ${code}`);
     this.activeSessions.delete(sessionId);
 
     // Notify renderer
@@ -174,9 +183,7 @@ class ClaudeSessionManager {
 
     // Stop HTTP server
     if (this.permissionServer) {
-      this.permissionServer.stop().catch((error) => {
-        console.error('[SessionManager] Error stopping permission server:', error);
-      });
+      this.permissionServer.stop().catch(() => { });
     }
   }
 }

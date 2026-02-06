@@ -17,6 +17,7 @@ const http = require('http');
 
 // Configuration - port where Electron app listens for permission requests
 const ELECTRON_PORT = process.env.ELECTRON_PERMISSION_PORT || 58472;
+const SESSION_ID = process.env.SESSION_ID;
 
 class PermissionMCPServer {
   constructor() {
@@ -50,9 +51,9 @@ class PermissionMCPServer {
                   type: 'string',
                   description: 'The name of the tool requesting permission',
                 },
-                tool_input: {
+                input: {
                   type: 'object',
-                  description: 'The input parameters for the tool',
+                  description: 'The input parameters for the tool like query for a search',
                 },
                 tool_use_id: {
                   type: 'string',
@@ -66,36 +67,81 @@ class PermissionMCPServer {
       };
     });
 
-    // Handle tool calls
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (request.params.name !== 'request_permission') {
         throw new Error(`Unknown tool: ${request.params.name}`);
       }
 
-      const { tool_name, tool_input, tool_use_id } = request.params.arguments;
+      const args = request.params.arguments || {};
+      console.error('[MCP Server] Received request_permission call with args:', JSON.stringify(args, null, 2));
+      const { tool_name, input, tool_use_id } = args;
 
       try {
-        // Send permission request to Electron app via HTTP
-        const approved = await this.requestPermissionFromElectron({
+        const permissionData = {
           tool: tool_name,
-          input: tool_input,
-          toolUseId: tool_use_id,
+          input: input,
+          tool_use_id,
+          session_id: SESSION_ID,
+        };
+        console.error('[MCP Server] Sending to Electron:', JSON.stringify(permissionData, null, 2));
+        const permissionResponse = await this.requestPermissionFromElectron(permissionData);
+        console.log('[MCP Server] Received response from Electron:', JSON.stringify(permissionResponse, null, 2));
+        const approved =
+          typeof permissionResponse === 'boolean'
+            ? permissionResponse
+            : Boolean(permissionResponse?.approved);
+        const updatedInput =
+          typeof permissionResponse === 'object'
+            ? permissionResponse.updatedInput
+            : undefined;
+        const denyMessage =
+          typeof permissionResponse === 'object'
+            ? permissionResponse.message
+            : undefined;
+
+        // Return format expected by Claude CLI --permission-prompt-tool
+        console.log('[MCP Server] Permission decision:', {
+          tool: tool_name,
+          tool_use_id,
+          approved,
+          hasUpdatedInput: updatedInput !== undefined
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                approved,
-                tool_use_id,
-                message: approved
-                  ? `Permission granted for ${tool_name}`
-                  : `Permission denied for ${tool_name}`,
-              }),
-            },
-          ],
-        };
+        if (approved) {
+          // Build response - only include updatedInput if we have tool_input
+          // If tool_input is undefined, omit updatedInput so Claude uses original input
+          const response = { behavior: 'allow' };
+
+          const finalInput = updatedInput !== undefined ? updatedInput : input;
+          if (finalInput !== undefined) {
+            response.updatedInput = finalInput;
+          }
+
+          const payload = {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(response),
+              },
+            ],
+          };
+          console.log('[MCP Server] Returning allow payload to Claude CLI:', JSON.stringify(payload));
+          return payload;
+        } else {
+          const payload = {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  behavior: 'deny',
+                  message: denyMessage || `User denied permission for ${tool_name}`,
+                }),
+              },
+            ],
+          };
+          console.log('[MCP Server] Returning deny payload to Claude CLI:', JSON.stringify(payload));
+          return payload;
+        }
       } catch (error) {
         return {
           content: [
@@ -120,6 +166,8 @@ class PermissionMCPServer {
     return new Promise((resolve, reject) => {
       const postData = JSON.stringify(permissionData);
 
+      console.log('[MCP Server in requestPermissionFromElectron] Sending to Electron:', JSON.stringify(postData, null, 2));
+
       const options = {
         hostname: 'localhost',
         port: ELECTRON_PORT,
@@ -142,7 +190,16 @@ class PermissionMCPServer {
         res.on('end', () => {
           try {
             const response = JSON.parse(data);
-            resolve(response.approved);
+            console.log('[MCP Server in requestPermissionFromElectron] Received response from Electron:', JSON.stringify(response, null, 2));
+            if (typeof response === 'boolean') {
+              resolve({ approved: response });
+              return;
+            }
+            if (response && typeof response === 'object') {
+              resolve(response);
+              return;
+            }
+            reject(new Error('Invalid response payload from Electron'));
           } catch (error) {
             reject(new Error(`Invalid response from Electron: ${error.message}`));
           }
@@ -166,14 +223,10 @@ class PermissionMCPServer {
   async start() {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-
-    console.error('[MCP Permission Server] Started successfully');
   }
 }
 
-// Start the server
-const server = new PermissionMCPServer();
-server.start().catch((error) => {
-  console.error('[MCP Permission Server] Failed to start:', error);
-  process.exit(1);
+    const server = new PermissionMCPServer();
+    server.start().catch((error) => {
+      process.exit(1);
 });

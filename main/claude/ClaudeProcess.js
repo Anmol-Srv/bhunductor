@@ -5,7 +5,7 @@ class ClaudeProcess {
   constructor(sessionId, workingDir, callbacks) {
     this.sessionId = sessionId;
     this.workingDir = workingDir;
-    this.callbacks = callbacks; // { onChunk, onComplete, onPermissionRequest, onError, onExit }
+    this.callbacks = callbacks; // { onChunk, onComplete, onError, onExit }
     this.buffer = '';
     this.process = null;
     this.currentContentBlock = null; // Track current content block for tool usage
@@ -31,7 +31,8 @@ class ClaudeProcess {
           command: 'node',
           args: [permissionServerPath],
           env: {
-            ELECTRON_PERMISSION_PORT: '58472'
+            ELECTRON_PERMISSION_PORT: '58472',
+            SESSION_ID: this.sessionId
           }
         }
       }
@@ -41,7 +42,6 @@ class ClaudeProcess {
     const tempDir = os.tmpdir();
     const mcpConfigPath = path.join(tempDir, `bhunductor-mcp-${this.sessionId}.json`);
     fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
-    console.log(`[Claude CLI] MCP config written to: ${mcpConfigPath}`);
 
     this.mcpConfigPath = mcpConfigPath; // Store for cleanup
 
@@ -70,8 +70,7 @@ class ClaudeProcess {
     // Handle errors
     this.process.stderr.on('data', (data) => {
       const errorMsg = data.toString();
-      console.error('[Claude CLI stderr]:', errorMsg);
-
+      console.log('[Claude CLI] stderr:', errorMsg.trim());
       // Send error to renderer
       this.callbacks.onError({
         sessionId: this.sessionId,
@@ -81,7 +80,6 @@ class ClaudeProcess {
 
     // Handle process errors
     this.process.on('error', (err) => {
-      console.error('[Claude CLI] Process error:', err);
       this.callbacks.onError({
         sessionId: this.sessionId,
         error: `Failed to start Claude CLI: ${err.message}`
@@ -90,11 +88,9 @@ class ClaudeProcess {
 
     // Handle exit
     this.process.on('exit', (code) => {
-      console.log(`[Claude CLI] Process exited with code ${code}`);
+      console.log('[Claude CLI] process exited with code:', code);
       this.callbacks.onExit(code);
     });
-
-    console.log(`[Claude CLI] Started for session ${this.sessionId} in ${this.workingDir}`);
   }
 
   processBuffer() {
@@ -105,11 +101,16 @@ class ClaudeProcess {
       if (line.trim()) {
         try {
           const event = JSON.parse(line);
-          console.log('[Claude CLI] Received event:', event.type, JSON.stringify(event, null, 2));
+          if (event?.type === 'assistant' && event?.message?.content) {
+            const toolUse = event.message.content.find?.(item => item?.type === 'tool_use');
+            if (toolUse) {
+              console.log('[Claude CLI] Requested tool permission:', JSON.stringify(toolUse, null, 2));
+            }
+          }
+          console.log('[Claude CLI] Received event:', event.type);
           this.handleStreamEvent(event);
         } catch (err) {
-          console.error('[Claude CLI] Failed to parse JSON:', err);
-          console.error('[Claude CLI] Line was:', line);
+          // Ignore parse errors
         }
       }
     }
@@ -120,7 +121,6 @@ class ClaudeProcess {
     switch (event.type) {
       case 'system':
         // System message (usually at start)
-        console.log('[Claude CLI] System message:', event.message);
         break;
 
       case 'assistant':
@@ -132,13 +132,11 @@ class ClaudeProcess {
 
           for (const contentBlock of contentArray) {
             if (contentBlock.type === 'tool_use') {
-              // Tool use detected - request permission
-              console.log('[Claude CLI] Tool use detected:', contentBlock.name);
-              this.callbacks.onPermissionRequest({
-                sessionId: this.sessionId,
-                tool: contentBlock.name,
-                input: contentBlock.input,
-                toolUseId: contentBlock.id
+              // Tool use in stream - MCP handling permissions
+              console.log('[Claude CLI] assistant tool_use content block:', {
+                id: contentBlock.id,
+                name: contentBlock.name,
+                input: contentBlock.input
               });
             } else if (contentBlock.type === 'text' && contentBlock.text) {
               // Text content - send as chunk
@@ -153,12 +151,18 @@ class ClaudeProcess {
 
       case 'result':
         // Message complete
+        console.log('[Claude CLI] result event:', {
+          stop_reason: event?.stop_reason,
+          stop_sequence: event?.stop_sequence,
+          output_tokens: event?.output_tokens
+        });
         this.callbacks.onComplete({
           sessionId: this.sessionId
         });
         break;
 
       case 'error':
+        console.log('[Claude CLI] error event:', event);
         this.callbacks.onError({
           sessionId: this.sessionId,
           error: event.error?.message || event.message || 'Unknown error'
@@ -172,6 +176,10 @@ class ClaudeProcess {
 
       case 'content_block_start':
         if (event.content_block?.type === 'tool_use') {
+          console.log('[Claude CLI] content_block_start tool_use:', {
+            id: event.content_block.id,
+            name: event.content_block.name
+          });
           this.currentContentBlock = {
             type: 'tool_use',
             id: event.content_block.id,
@@ -194,22 +202,18 @@ class ClaudeProcess {
 
       case 'content_block_stop':
         if (this.currentContentBlock?.type === 'tool_use') {
-          try {
-            const input = JSON.parse(this.currentContentBlock.inputJson);
-            this.callbacks.onPermissionRequest({
-              sessionId: this.sessionId,
-              tool: this.currentContentBlock.name,
-              input: input,
-              toolUseId: this.currentContentBlock.id
-            });
-          } catch (err) {
-            console.error('[Claude CLI] Failed to parse tool input:', err);
-          }
+          // Tool use detected in stream - MCP handling permissions
+          console.log('[Claude CLI] content_block_stop tool_use:', {
+            id: this.currentContentBlock.id,
+            name: this.currentContentBlock.name,
+            inputJson: this.currentContentBlock.inputJson
+          });
           this.currentContentBlock = null;
         }
         break;
 
       case 'message_stop':
+        console.log('[Claude CLI] message_stop event');
         this.callbacks.onComplete({
           sessionId: this.sessionId
         });
@@ -217,15 +221,12 @@ class ClaudeProcess {
 
       case 'user':
         // User event (can contain tool_result or other user messages)
-        console.log('[Claude CLI] User event received:', JSON.stringify(event, null, 2));
-        // This typically indicates tool execution result or error
-        if (event.tool_use_result) {
-          console.log('[Claude CLI] Tool execution result:', event.tool_use_result);
+        if (event.message && event.message.content) {
+          console.log('[Claude CLI] user event content:', event.message.content);
         }
         break;
 
       default:
-        console.log('[Claude CLI] Unknown event type:', event.type);
         break;
     }
   }
@@ -242,24 +243,9 @@ class ClaudeProcess {
         }
       };
       this.process.stdin.write(JSON.stringify(messageObj) + '\n');
-      console.log('[Claude CLI] Sent message:', messageObj);
     }
   }
 
-  sendPermissionResponse(approved, toolUseId) {
-    if (this.process && this.process.stdin.writable) {
-      // Send permission response as a 'control' message type
-      const response = {
-        type: 'control',
-        subtype: 'permission_response',
-        tool_use_id: toolUseId,
-        approved: approved
-      };
-
-      console.log('[Claude CLI] Sending permission response:', response);
-      this.process.stdin.write(JSON.stringify(response) + '\n');
-    }
-  }
 
   stop() {
     if (this.process) {
@@ -273,10 +259,9 @@ class ClaudeProcess {
         const fs = require('fs');
         if (fs.existsSync(this.mcpConfigPath)) {
           fs.unlinkSync(this.mcpConfigPath);
-          console.log(`[Claude CLI] Cleaned up MCP config: ${this.mcpConfigPath}`);
         }
       } catch (error) {
-        console.error(`[Claude CLI] Failed to cleanup MCP config: ${error.message}`);
+        // Ignore cleanup errors
       }
       this.mcpConfigPath = null;
     }

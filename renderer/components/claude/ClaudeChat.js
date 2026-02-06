@@ -7,10 +7,12 @@ function ClaudeChat({ sessionId, activeSessions, onSwitchSession, onStopSession 
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState('');
-  const [pendingPermission, setPendingPermission] = useState(null);
+  const [permissionQueue, setPermissionQueue] = useState([]);
   const messagesEndRef = useRef(null);
-
-  console.log('[ClaudeChat] Rendered with:', { sessionId, activeSessions });
+  const visibleSessions = activeSessions.filter(session => {
+    const sessId = session.sessionId || session.id;
+    return sessId === sessionId;
+  });
 
   useEffect(() => {
     const unsubscribeChunk = window.electron.on('claude:message-chunk', (data) => {
@@ -34,9 +36,7 @@ function ClaudeChat({ sessionId, activeSessions, onSwitchSession, onStopSession 
     });
 
     const unsubscribePermission = window.electron.on('claude:permission-request', (data) => {
-      if (data.sessionId === sessionId) {
-        setPendingPermission(data);
-      }
+      setPermissionQueue(prev => [...prev, data]);
     });
 
     const unsubscribeError = window.electron.on('claude:session-error', (data) => {
@@ -64,26 +64,44 @@ function ClaudeChat({ sessionId, activeSessions, onSwitchSession, onStopSession 
     setInput('');
     setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
 
+    console.log('[ClaudeChat] user sent a message:', userMessage);
     const result = await window.electron.invoke('claude:send-message', sessionId, userMessage);
     if (!result.success) {
       alert(`Failed to send message: ${result.error}`);
     }
   };
 
+  const activePermission = permissionQueue[0] || null;
+  if (activePermission) {
+    console.log('[ClaudeChat] permission json passed to claude chat:', activePermission);
+  }
+
   const handlePermissionResponse = async (approved) => {
-    const result = await window.electron.invoke('claude:permission-respond', pendingPermission.requestId, approved);
+    if (!activePermission) {
+      return;
+    }
+
+    console.log('[ClaudeChat] responding to permission request:', {
+      requestId: activePermission.requestId,
+      approved
+    });
+    const result = await window.electron.invoke(
+      'claude:permission-respond',
+      activePermission.requestId,
+      approved
+    );
+    console.log('[ClaudeChat] permission response result:', result);
     if (result.success) {
-      setPendingPermission(null);
+      setPermissionQueue(prev => prev.slice(1));
     }
   };
 
   return (
     <div className="claude-chat">
       <div className="session-tabs">
-        {activeSessions.map(session => {
+        {visibleSessions.map(session => {
           const sessId = session.sessionId || session.id;
           if (!sessId) {
-            console.error('Session missing ID:', session);
             return null;
           }
 
@@ -146,10 +164,12 @@ function ClaudeChat({ sessionId, activeSessions, onSwitchSession, onStopSession 
         </button>
       </div>
 
-      {pendingPermission && (
+      {activePermission && (
         <PermissionPrompt
-          tool={pendingPermission.tool}
-          input={pendingPermission.input}
+          tool={activePermission.tool}
+          input={activePermission.input}
+          sessionId={activePermission.session_id}
+          toolUseId={activePermission.tool_use_id}
           onApprove={() => handlePermissionResponse(true)}
           onDeny={() => handlePermissionResponse(false)}
         />

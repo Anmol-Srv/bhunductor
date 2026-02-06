@@ -83,7 +83,7 @@ The MCP server is configured dynamically in `ClaudeProcess.js`:
 
 Claude CLI is invoked with:
 - `--mcp-config <json>`: The MCP server configuration
-- `--permission-prompt-tool bhunductor-permissions__request_permission`: The tool to call for permissions
+- `--permission-prompt-tool mcp__bhunductor-permissions__request_permission`: The tool to call for permissions
 
 ## Port Configuration
 

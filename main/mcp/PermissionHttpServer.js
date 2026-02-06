@@ -11,12 +11,10 @@ class PermissionHttpServer {
   constructor(port = 58472) {
     this.port = port;
     this.server = null;
-    this.pendingRequests = new Map(); // requestId -> { resolve, reject }
+    this.pendingRequests = new Map();
+    this.requestTimeoutMs = 300000;
   }
 
-  /**
-   * Start the HTTP server
-   */
   start() {
     return new Promise((resolve, reject) => {
       this.server = http.createServer((req, res) => {
@@ -30,24 +28,18 @@ class PermissionHttpServer {
 
       this.server.on('error', (error) => {
         if (error.code === 'EADDRINUSE') {
-          console.error(`[PermissionHttpServer] Port ${this.port} is already in use`);
           reject(error);
-        } else {
-          console.error('[PermissionHttpServer] Server error:', error);
         }
       });
 
       this.server.listen(this.port, 'localhost', () => {
-        console.log(`[PermissionHttpServer] Listening on http://localhost:${this.port}`);
         resolve();
       });
     });
   }
 
-  /**
-   * Handle incoming permission request from MCP server
-   */
   handlePermissionRequest(req, res) {
+
     let body = '';
 
     req.on('data', (chunk) => {
@@ -56,65 +48,103 @@ class PermissionHttpServer {
 
     req.on('end', async () => {
       try {
-        const permissionData = JSON.parse(body);
-        console.log('[PermissionHttpServer] Received permission request:', permissionData);
+        const permissionData = JSON.parse(body || '{}');
+        if (!permissionData || typeof permissionData !== 'object') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid permission request', approved: false }));
+          return;
+        }
 
-        // Store the response handler
-        const requestId = permissionData.toolUseId || Date.now().toString();
-
-        const responsePromise = new Promise((resolve) => {
-          this.pendingRequests.set(requestId, { resolve, res });
+        if (!permissionData.tool_use_id) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid permission request, tool_use_id is required', approved: false }));
+          return;
+        }
+        const requestId = permissionData.tool_use_id;
+        console.log('[PermissionHttpServer] received permission request:', {
+          requestId,
+          tool: permissionData.tool,
+          sessionId: permissionData.session_id
         });
 
-        // Notify callback that we have a permission request
+        const responsePromise = new Promise((resolve) => {
+          const timeoutId = setTimeout(() => {
+            this.respondToPermission(requestId, false, 'Permission request timed out');
+          }, this.requestTimeoutMs);
+
+          this.pendingRequests.set(requestId, {
+            resolve,
+            res,
+            timeoutId,
+            createdAt: Date.now()
+          });
+        });
+
         if (this.onPermissionRequest) {
           this.onPermissionRequest(requestId, permissionData);
         }
 
-        // Wait for response (will be provided via respondToPermission method)
+        res.on('close', () => {
+          const pending = this.pendingRequests.get(requestId);
+          if (pending && pending.res === res) {
+            clearTimeout(pending.timeoutId);
+            this.pendingRequests.delete(requestId);
+            console.warn('[PermissionHttpServer] response closed before decision:', {
+              requestId
+            });
+          }
+        });
+
+        res.on('finish', () => {
+          const pending = this.pendingRequests.get(requestId);
+          if (pending && pending.res === res) {
+            clearTimeout(pending.timeoutId);
+            this.pendingRequests.delete(requestId);
+          }
+        });
+
         await responsePromise;
 
       } catch (error) {
-        console.error('[PermissionHttpServer] Error handling request:', error);
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: error.message, approved: false }));
       }
     });
   }
 
-  /**
-   * Respond to a pending permission request
-   * Called by the session manager after user approves/denies
-   */
-  respondToPermission(requestId, approved) {
+  respondToPermission(requestId, approved, message) {
     const pending = this.pendingRequests.get(requestId);
 
     if (!pending) {
-      console.error(`[PermissionHttpServer] No pending request found for ${requestId}`);
-      return;
+      console.warn('[PermissionHttpServer] respondToPermission: no pending request', {
+        requestId,
+        approved
+      });
+      return false;
     }
 
-    const { resolve, res } = pending;
+    const { resolve, res, timeoutId } = pending;
 
-    // Send response back to MCP server
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ approved }));
+    if (!res.writableEnded) {
+      console.log('[PermissionHttpServer] responding to MCP with decision:', {
+        requestId,
+        approved,
+        message
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ approved, message }));
+    }
 
-    // Resolve the promise and cleanup
     resolve();
+    clearTimeout(timeoutId);
     this.pendingRequests.delete(requestId);
-
-    console.log(`[PermissionHttpServer] Responded to permission ${requestId}: ${approved ? 'APPROVED' : 'DENIED'}`);
+    return true;
   }
 
-  /**
-   * Stop the server
-   */
   stop() {
     return new Promise((resolve) => {
       if (this.server) {
         this.server.close(() => {
-          console.log('[PermissionHttpServer] Stopped');
           resolve();
         });
       } else {
