@@ -2,11 +2,11 @@ const { ipcMain, dialog, app } = require('electron');
 const { IPC_CHANNELS } = require('../shared/constants');
 const Folder = require('./data/models/Folder');
 const Worktree = require('./data/models/Worktree');
+const ClaudeSessionManager = require('./claude/ClaudeSessionManager');
 
-/**
- * Register all IPC handlers
- */
-function registerIPCHandlers(configManager) {
+function registerIPCHandlers(configManager, mainWindow) {
+
+  const claudeManager = new ClaudeSessionManager(mainWindow);
   ipcMain.handle(IPC_CHANNELS.CONFIG_GET, (event, key) => {
     try {
       if (key) {
@@ -175,6 +175,57 @@ function registerIPCHandlers(configManager) {
       return { success: true, result };
     } catch (error) {
       console.error('[IPC] Error cleaning up worktrees:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Claude session handlers
+  ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_START, async (event, folderId, worktreeId) => {
+    try {
+      const session = claudeManager.createSession(folderId, worktreeId);
+      return { success: true, session };
+    } catch (error) {
+      console.error('[IPC] Error starting Claude session:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_STOP, async (event, sessionId) => {
+    try {
+      claudeManager.stopSession(sessionId);
+      return { success: true };
+    } catch (error) {
+      console.error('[IPC] Error stopping Claude session:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_LIST, async (event, folderId, worktreeId) => {
+    try {
+      const sessions = claudeManager.listSessions(folderId, worktreeId);
+      return { success: true, sessions };
+    } catch (error) {
+      console.error('[IPC] Error listing Claude sessions:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CLAUDE_SEND_MESSAGE, async (event, sessionId, message) => {
+    try {
+      claudeManager.sendMessage(sessionId, message);
+      return { success: true };
+    } catch (error) {
+      console.error('[IPC] Error sending message:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CLAUDE_PERMISSION_RESPOND, async (event, requestId, approved) => {
+    try {
+      claudeManager.respondToPermission(requestId, approved);
+      return { success: true };
+    } catch (error) {
+      console.error('[IPC] Error responding to permission:', error);
       return { success: false, error: error.message };
     }
   });

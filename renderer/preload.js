@@ -17,6 +17,16 @@ const ALLOWED_CHANNELS = [
   'worktree:get-active-path',
   'worktree:set-active',
   'worktree:cleanup',
+  'claude:session-start',
+  'claude:session-stop',
+  'claude:session-list',
+  'claude:send-message',
+  'claude:permission-respond',
+  'claude:message-chunk',
+  'claude:message-complete',
+  'claude:permission-request',
+  'claude:session-error',
+  'claude:session-exited',
   'app:get-version',
   'app:quit'
 ];

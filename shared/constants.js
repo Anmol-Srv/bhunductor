@@ -18,6 +18,17 @@ const IPC_CHANNELS = {
   WORKTREE_SET_ACTIVE: 'worktree:set-active',
   WORKTREE_CLEANUP: 'worktree:cleanup',
 
+  CLAUDE_SESSION_START: 'claude:session-start',
+  CLAUDE_SESSION_STOP: 'claude:session-stop',
+  CLAUDE_SESSION_LIST: 'claude:session-list',
+  CLAUDE_SEND_MESSAGE: 'claude:send-message',
+  CLAUDE_PERMISSION_RESPOND: 'claude:permission-respond',
+  CLAUDE_MESSAGE_CHUNK: 'claude:message-chunk',
+  CLAUDE_MESSAGE_COMPLETE: 'claude:message-complete',
+  CLAUDE_PERMISSION_REQUEST: 'claude:permission-request',
+  CLAUDE_SESSION_ERROR: 'claude:session-error',
+  CLAUDE_SESSION_EXITED: 'claude:session-exited',
+
   APP_GET_VERSION: 'app:get-version',
   APP_QUIT: 'app:quit'
 };

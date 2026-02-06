@@ -9,7 +9,11 @@ function Sidebar({
   activeWorktree,
   onSelectBranch,
   onCreateBranch,
-  onDeleteBranch
+  onDeleteBranch,
+  onStartSession,
+  onOpenSession,
+  sessionsByWorktree,
+  openTabs
 }) {
   const [menuOpen, setMenuOpen] = useState(null);
 
@@ -17,9 +21,10 @@ function Sidebar({
     <div className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
       {!collapsed && (
         <div className="sidebar-content">
-          <div className="sidebar-header">
-            <span>Branches</span>
-            <div className="header-actions">
+          <div className="sidebar-section">
+            <div className="sidebar-header">
+              <span>Branches</span>
+              <div className="header-actions">
               <button
                 className="add-branch-btn"
                 onClick={onCreateBranch}
@@ -31,20 +36,25 @@ function Sidebar({
                 <PanelLeftClose size={16} />
               </button>
             </div>
-          </div>
+            </div>
 
-          <div className="branch-list">
+            <div className="branch-list">
             {worktrees.map(worktree => (
               <BranchItem
                 key={worktree.id}
                 worktree={worktree}
                 isActive={activeWorktree?.id === worktree.id}
+                sessions={sessionsByWorktree[worktree.id] || []}
+                openTabs={openTabs || []}
                 onSelect={() => onSelectBranch(worktree)}
                 onDelete={() => onDeleteBranch(worktree.id, worktree.branch_name)}
+                onStartSession={onStartSession}
+                onOpenSession={onOpenSession}
                 menuOpen={menuOpen === worktree.id}
                 onMenuToggle={() => setMenuOpen(menuOpen === worktree.id ? null : worktree.id)}
               />
             ))}
+            </div>
           </div>
         </div>
       )}
