@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GitBranch, ChevronRight, ChevronDown, MoreVertical, Trash2, Plus, MessageSquare } from 'lucide-react';
+import { GitBranch, ChevronRight, ChevronDown, MoreVertical, Trash2, Plus } from 'lucide-react';
 
 function BranchItem({
   worktree,
@@ -90,7 +90,6 @@ function BranchItem({
                   onOpenSession(sessId, worktree.id, worktree.branch_name);
                 }}
               >
-                <MessageSquare size={12} className="session-icon" />
                 <span className="session-label">Session {sessId.slice(0, 8)}</span>
                 {isSessionOpen(sessId) && <span className="session-open-dot" />}
               </div>

@@ -439,17 +439,17 @@ body {
 
 /* Session list under branch */
 .branch-sessions {
-  padding: 2px 0 4px 28px;
+  padding: 4px 4px 6px 4px;
 }
 
 .session-item {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  padding: 4px 8px;
+  padding: 8px 10px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
   transition: background-color 0.15s ease;
 }
@@ -461,15 +461,6 @@ body {
 
 .session-item.open {
   color: var(--text-primary);
-}
-
-.session-icon {
-  flex-shrink: 0;
-  color: var(--text-tertiary);
-}
-
-.session-item.open .session-icon {
-  color: var(--accent-primary);
 }
 
 .session-label {
@@ -491,12 +482,12 @@ body {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  padding: 4px 8px;
+  padding: 8px 10px;
   border-radius: 4px;
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-tertiary);
   transition: all 0.15s ease;
   width: 100%;
