@@ -208,6 +208,60 @@ function runMigrations() {
     console.log(`[Database] Migration already applied: ${MIGRATION_ADD_CLAUDE_SESSION_ID}`);
   }
 
+  // Migration 3: Add messages column to claude_sessions table
+  const MIGRATION_ADD_MESSAGES = 'add_messages_to_claude_sessions';
+
+  if (!hasMigrationRun(MIGRATION_ADD_MESSAGES)) {
+    console.log(`[Database] Running migration: ${MIGRATION_ADD_MESSAGES}`);
+
+    try {
+      const tableInfo = db.pragma('table_info(claude_sessions)');
+      const hasColumn = tableInfo.some(col => col.name === 'messages');
+
+      if (!hasColumn) {
+        console.log('[Database] Adding messages column to claude_sessions table...');
+        db.exec('ALTER TABLE claude_sessions ADD COLUMN messages TEXT');
+        console.log('[Database] Column added successfully');
+      } else {
+        console.log('[Database] Column messages already exists, skipping');
+      }
+
+      markMigrationApplied(MIGRATION_ADD_MESSAGES);
+      console.log(`[Database] Migration completed: ${MIGRATION_ADD_MESSAGES}`);
+    } catch (error) {
+      console.error(`[Database] Migration failed: ${MIGRATION_ADD_MESSAGES}`, error);
+    }
+  } else {
+    console.log(`[Database] Migration already applied: ${MIGRATION_ADD_MESSAGES}`);
+  }
+
+  // Migration 4: Add source column to claude_sessions table
+  const MIGRATION_ADD_SOURCE = 'add_source_to_claude_sessions';
+
+  if (!hasMigrationRun(MIGRATION_ADD_SOURCE)) {
+    console.log(`[Database] Running migration: ${MIGRATION_ADD_SOURCE}`);
+
+    try {
+      const tableInfo = db.pragma('table_info(claude_sessions)');
+      const hasColumn = tableInfo.some(col => col.name === 'source');
+
+      if (!hasColumn) {
+        console.log('[Database] Adding source column to claude_sessions table...');
+        db.exec("ALTER TABLE claude_sessions ADD COLUMN source TEXT DEFAULT 'app'");
+        console.log('[Database] Column added successfully');
+      } else {
+        console.log('[Database] Column source already exists, skipping');
+      }
+
+      markMigrationApplied(MIGRATION_ADD_SOURCE);
+      console.log(`[Database] Migration completed: ${MIGRATION_ADD_SOURCE}`);
+    } catch (error) {
+      console.error(`[Database] Migration failed: ${MIGRATION_ADD_SOURCE}`, error);
+    }
+  } else {
+    console.log(`[Database] Migration already applied: ${MIGRATION_ADD_SOURCE}`);
+  }
+
   console.log('[Database] Migrations complete');
 }
 

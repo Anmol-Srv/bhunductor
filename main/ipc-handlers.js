@@ -180,12 +180,32 @@ function registerIPCHandlers(configManager, mainWindow) {
   });
 
   // Claude session handlers
-  ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_START, async (event, folderId, worktreeId) => {
+  ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_START, async (event, folderId, worktreeId, claudeSessionId) => {
     try {
-      const session = claudeManager.createSession(folderId, worktreeId);
-      return { success: true, session };
+      const { deletedSessionIds, ...session } = claudeManager.createSession(folderId, worktreeId, claudeSessionId || null);
+      return { success: true, session, deletedSessionIds };
     } catch (error) {
       console.error('[IPC] Error starting Claude session:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_GET_HISTORY, async (event, sessionId) => {
+    try {
+      const messages = claudeManager.getSessionHistory(sessionId);
+      return { success: true, messages };
+    } catch (error) {
+      console.error('[IPC] Error getting session history:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_SAVE_MESSAGES, async (event, sessionId, messages) => {
+    try {
+      claudeManager.saveSessionMessages(sessionId, messages);
+      return { success: true };
+    } catch (error) {
+      console.error('[IPC] Error saving session messages:', error);
       return { success: false, error: error.message };
     }
   });
@@ -196,6 +216,16 @@ function registerIPCHandlers(configManager, mainWindow) {
       return { success: true };
     } catch (error) {
       console.error('[IPC] Error stopping Claude session:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_DELETE, async (event, sessionId) => {
+    try {
+      claudeManager.deleteSession(sessionId);
+      return { success: true };
+    } catch (error) {
+      console.error('[IPC] Error deleting Claude session:', error);
       return { success: false, error: error.message };
     }
   });

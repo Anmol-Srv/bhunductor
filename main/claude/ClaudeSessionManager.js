@@ -10,6 +10,10 @@ class ClaudeSessionManager {
     this.mainWindow = mainWindow;
     this.activeSessions = new Map(); // sessionId -> ClaudeProcess
     this.pendingPermissions = new Map(); // requestId -> { sessionId, resolve }
+    this.historyBuffer = new Map(); // sessionId -> messages[]
+
+    // Mark any leftover 'active' sessions from previous runs as exited
+    this.cleanupStaleSessions();
 
     // Start HTTP server for MCP permission requests
     this.permissionServer = new PermissionHttpServer(58472);
@@ -18,6 +22,11 @@ class ClaudeSessionManager {
     };
 
     this.permissionServer.start().catch(() => { });
+  }
+
+  cleanupStaleSessions() {
+    const db = getDatabase();
+    db.prepare("UPDATE claude_sessions SET status = 'exited' WHERE status = 'active'").run();
   }
 
   /**
@@ -67,8 +76,10 @@ class ClaudeSessionManager {
     });
   }
 
-  createSession(folderId, worktreeId) {
+  createSession(folderId, worktreeId, targetClaudeSessionId = null) {
     const sessionId = uuidv4();
+    let deletedSessionIds = [];
+    let previousMessages = [];
 
     // Get working directory - use worktree-specific path
     const folder = Folder.findById(folderId);
@@ -77,15 +88,54 @@ class ClaudeSessionManager {
       ? Worktree.getActivePath(worktree, folder)
       : folder.path;
 
-    // Check for previous session to resume
+    // Determine resume/continue behavior
     const options = {};
-    const lastSession = this.getLastSessionForWorktree(folderId, worktreeId);
-    if (lastSession && lastSession.claude_session_id) {
-      options.resumeSessionId = lastSession.claude_session_id;
-      console.log(`[ClaudeSessionManager] Resuming session with Claude ID: ${lastSession.claude_session_id}`);
-    } else if (lastSession) {
-      options.continueSession = true;
-      console.log('[ClaudeSessionManager] Continuing previous session');
+    if (targetClaudeSessionId) {
+      // User clicked a specific past session — resume that exact conversation
+      options.resumeSessionId = targetClaudeSessionId;
+      console.log(`[ClaudeSessionManager] Resuming specific session: ${targetClaudeSessionId}`);
+
+      // Load messages from old session before deleting
+      const db = getDatabase();
+      const oldSession = db.prepare(`
+        SELECT messages FROM claude_sessions
+        WHERE claude_session_id = ? AND status IN ('exited', 'stopped')
+        ORDER BY created_at DESC LIMIT 1
+      `).get(targetClaudeSessionId);
+      if (oldSession?.messages) {
+        try { previousMessages = JSON.parse(oldSession.messages); } catch (e) { }
+      }
+
+      // Delete old DB rows with matching claude_session_id to avoid duplicates
+      const oldRows = db.prepare(`
+        SELECT id FROM claude_sessions
+        WHERE claude_session_id = ? AND status IN ('exited', 'stopped')
+      `).all(targetClaudeSessionId);
+      deletedSessionIds = oldRows.map(r => r.id);
+      if (deletedSessionIds.length > 0) {
+        db.prepare(`
+          DELETE FROM claude_sessions
+          WHERE claude_session_id = ? AND status IN ('exited', 'stopped')
+        `).run(targetClaudeSessionId);
+        console.log(`[ClaudeSessionManager] Deleted ${deletedSessionIds.length} old DB row(s) for resumed session`);
+      }
+    } else {
+      // "New Session" — continue the most recent conversation on this branch
+      const lastSession = this.getLastSessionForWorktree(folderId, worktreeId);
+      if (lastSession && lastSession.claude_session_id) {
+        options.continueSession = true;
+        // Load messages from the last session
+        if (lastSession.messages) {
+          try { previousMessages = JSON.parse(lastSession.messages); } catch (e) { }
+        }
+        console.log('[ClaudeSessionManager] Continuing previous session on branch');
+      }
+    }
+
+    // Pre-load previous messages into buffer so ClaudeChat can pull them on mount
+    if (previousMessages.length > 0) {
+      console.log(`[ClaudeSessionManager] Pre-loading ${previousMessages.length} messages from previous session`);
+      this.historyBuffer.set(sessionId, previousMessages);
     }
 
     // Create subprocess
@@ -104,6 +154,11 @@ class ClaudeSessionManager {
       },
       onSystemInfo: ({ sessionId: sid, claudeSessionId }) => {
         this.handleSystemInfo(sid, claudeSessionId);
+      },
+      onHistory: (data) => {
+        // Buffer history so it can be pulled by the renderer on mount
+        this.historyBuffer.set(sessionId, data.messages || []);
+        this.mainWindow.webContents.send('claude:conversation-history', data);
       }
     }, options);
 
@@ -117,7 +172,15 @@ class ClaudeSessionManager {
       VALUES (?, ?, ?, 'active')
     `).run(sessionId, folderId, worktreeId);
 
-    return { sessionId, workingDir };
+    return {
+      sessionId,
+      id: sessionId,
+      folder_id: folderId,
+      worktree_id: worktreeId,
+      status: 'active',
+      workingDir,
+      deletedSessionIds
+    };
   }
 
   /**
@@ -132,6 +195,15 @@ class ClaudeSessionManager {
   }
 
   /**
+   * Return and clear buffered history for a session (used by renderer on mount)
+   */
+  getSessionHistory(sessionId) {
+    const messages = this.historyBuffer.get(sessionId) || null;
+    this.historyBuffer.delete(sessionId);
+    return messages;
+  }
+
+  /**
    * Get the most recent completed session for a worktree (for resume)
    */
   getLastSessionForWorktree(folderId, worktreeId) {
@@ -142,6 +214,16 @@ class ClaudeSessionManager {
       ORDER BY created_at DESC
       LIMIT 1
     `).get(folderId, worktreeId);
+  }
+
+  /**
+   * Save chat messages to the database for a session
+   */
+  saveSessionMessages(sessionId, messages) {
+    const db = getDatabase();
+    db.prepare(`
+      UPDATE claude_sessions SET messages = ? WHERE id = ?
+    `).run(JSON.stringify(messages), sessionId);
   }
 
   sendMessage(sessionId, message) {
@@ -170,6 +252,21 @@ class ClaudeSessionManager {
     this.pendingPermissions.delete(requestId);
   }
 
+  /**
+   * Delete an inactive session from the application database
+   */
+  deleteSession(sessionId) {
+    const db = getDatabase();
+    const session = db.prepare('SELECT status FROM claude_sessions WHERE id = ?').get(sessionId);
+    if (!session) {
+      throw new Error(`Session ${sessionId} not found`);
+    }
+    if (session.status === 'active') {
+      throw new Error('Cannot delete an active session. Stop it first.');
+    }
+    db.prepare('DELETE FROM claude_sessions WHERE id = ?').run(sessionId);
+  }
+
   stopSession(sessionId) {
     const process = this.activeSessions.get(sessionId);
     if (process) {
@@ -186,6 +283,7 @@ class ClaudeSessionManager {
 
   handleSessionExit(sessionId, code) {
     this.activeSessions.delete(sessionId);
+    this.historyBuffer.delete(sessionId);
 
     // Notify renderer
     this.mainWindow.webContents.send('claude:session-exited', { sessionId, code });
@@ -204,13 +302,13 @@ class ClaudeSessionManager {
     if (worktreeId) {
       sessions = db.prepare(`
         SELECT * FROM claude_sessions
-        WHERE folder_id = ? AND worktree_id = ? AND status = 'active'
+        WHERE folder_id = ? AND worktree_id = ? AND COALESCE(source, 'app') = 'app'
         ORDER BY created_at DESC
       `).all(folderId, worktreeId);
     } else {
       sessions = db.prepare(`
         SELECT * FROM claude_sessions
-        WHERE folder_id = ? AND status = 'active'
+        WHERE folder_id = ? AND COALESCE(source, 'app') = 'app'
         ORDER BY created_at DESC
       `).all(folderId);
     }

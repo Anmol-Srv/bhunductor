@@ -41,17 +41,33 @@ function ClaudeChat({ sessionId }) {
       alert(`Claude Error: ${data.error}`);
     });
 
+    const unsubscribeHistory = window.electron.on('claude:conversation-history', (data) => {
+      if (data?.sessionId !== sessionId) return;
+      setMessages(data.messages);
+    });
+
+    // Pull any buffered history that arrived before this component mounted
+    window.electron.invoke('claude:session-get-history', sessionId).then(result => {
+      if (result?.success && result.messages && result.messages.length > 0) {
+        setMessages(result.messages);
+      }
+    }).catch(() => { });
+
     return () => {
       unsubscribeChunk();
       unsubscribeComplete();
       unsubscribePermission();
       unsubscribeError();
+      unsubscribeHistory();
     };
   }, [sessionId]);
 
-  // Sync messages to module-level cache
+  // Sync messages to module-level cache and persist to DB
   useEffect(() => {
     messageCache.set(sessionId, messages);
+    if (messages.length > 0) {
+      window.electron.invoke('claude:session-save-messages', sessionId, messages).catch(() => {});
+    }
   }, [sessionId, messages]);
 
   useEffect(() => {
@@ -139,6 +155,9 @@ function ClaudeChat({ sessionId }) {
     </div>
   );
 }
+
+// Get cached messages for a session (for persisting before stop/exit)
+ClaudeChat.getCache = (sessionId) => messageCache.get(sessionId) || [];
 
 // Clear cache entry when a session is fully stopped
 ClaudeChat.clearCache = (sessionId) => messageCache.delete(sessionId);

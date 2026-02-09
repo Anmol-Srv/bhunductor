@@ -478,6 +478,123 @@ body {
   flex-shrink: 0;
 }
 
+/* Active session green indicator dot */
+.session-active-indicator {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: var(--success);
+  flex-shrink: 0;
+}
+
+/* Inactive sessions dropdown section */
+.inactive-sessions-section {
+  margin-top: 2px;
+}
+
+.inactive-sessions-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  transition: background-color var(--transition-fast);
+}
+
+.inactive-sessions-toggle:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.inactive-sessions-chevron {
+  display: flex;
+  align-items: center;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.inactive-sessions-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+.inactive-sessions-indicator {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: var(--error);
+  flex-shrink: 0;
+}
+
+.inactive-sessions-count {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  margin-left: auto;
+}
+
+.inactive-sessions-list {
+  padding-left: 6px;
+}
+
+.inactive-sessions-list .session-item {
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.inactive-sessions-list .session-item:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.session-status-badge {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  flex-shrink: 0;
+  text-transform: capitalize;
+}
+
+.session-status-badge.stopped {
+  color: var(--warning);
+  background-color: rgba(255, 193, 7, 0.1);
+}
+
+.session-status-badge.exited {
+  color: var(--error);
+  background-color: rgba(220, 53, 69, 0.1);
+}
+
+.session-delete-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  padding: 2px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.session-item.inactive:hover .session-delete-btn {
+  display: flex;
+}
+
+.session-delete-btn:hover {
+  color: var(--error);
+  background-color: rgba(220, 53, 69, 0.1);
+}
+
 .new-session-btn {
   display: flex;
   align-items: center;

@@ -5,12 +5,15 @@ class ClaudeProcess {
   constructor(sessionId, workingDir, callbacks, options = {}) {
     this.sessionId = sessionId;
     this.workingDir = workingDir;
-    this.callbacks = callbacks; // { onChunk, onComplete, onError, onExit, onSystemInfo }
+    this.callbacks = callbacks; // { onChunk, onComplete, onError, onExit, onSystemInfo, onHistory }
     this.options = options; // { resumeSessionId, continueSession }
     this.buffer = '';
     this.process = null;
     this.currentContentBlock = null; // Track current content block for tool usage
     this.claudeSessionId = null;
+    this.isReplayingHistory = !!(options.resumeSessionId || options.continueSession);
+    this.historyMessages = [];
+    this.replayTimer = null; // Debounce timer for end-of-replay detection
   }
 
   start() {
@@ -137,18 +140,33 @@ class ClaudeProcess {
             ? event.message.content
             : [event.message.content];
 
-          for (const contentBlock of contentArray) {
-            if (contentBlock.type === 'tool_use') {
-              console.log('[Claude CLI] assistant tool_use content block:', {
-                id: contentBlock.id,
-                name: contentBlock.name,
-                input: contentBlock.input
-              });
-            } else if (contentBlock.type === 'text' && contentBlock.text) {
-              this.callbacks.onChunk({
-                sessionId: this.sessionId,
-                text: contentBlock.text
-              });
+          if (this.isReplayingHistory) {
+            // Cancel debounce timer — more replay events are still arriving
+            if (this.replayTimer) { clearTimeout(this.replayTimer); this.replayTimer = null; }
+            // Collect assistant text for history replay
+            const texts = [];
+            for (const contentBlock of contentArray) {
+              if (contentBlock.type === 'text' && contentBlock.text) {
+                texts.push(contentBlock.text);
+              }
+            }
+            if (texts.length > 0) {
+              this.historyMessages.push({ role: 'assistant', text: texts.join('') });
+            }
+          } else {
+            for (const contentBlock of contentArray) {
+              if (contentBlock.type === 'tool_use') {
+                console.log('[Claude CLI] assistant tool_use content block:', {
+                  id: contentBlock.id,
+                  name: contentBlock.name,
+                  input: contentBlock.input
+                });
+              } else if (contentBlock.type === 'text' && contentBlock.text) {
+                this.callbacks.onChunk({
+                  sessionId: this.sessionId,
+                  text: contentBlock.text
+                });
+              }
             }
           }
         }
@@ -160,9 +178,22 @@ class ClaudeProcess {
           stop_sequence: event?.stop_sequence,
           output_tokens: event?.output_tokens
         });
-        this.callbacks.onComplete({
-          sessionId: this.sessionId
-        });
+        if (this.isReplayingHistory) {
+          // Emit progressive history update (don't end replay — more turns may follow)
+          if (this.callbacks.onHistory && this.historyMessages.length > 0) {
+            this.callbacks.onHistory({
+              sessionId: this.sessionId,
+              messages: [...this.historyMessages]
+            });
+          }
+          // Debounce: if no more replay events arrive within 500ms, finalize
+          if (this.replayTimer) clearTimeout(this.replayTimer);
+          this.replayTimer = setTimeout(() => this.finalizeReplay(), 500);
+        } else {
+          this.callbacks.onComplete({
+            sessionId: this.sessionId
+          });
+        }
         break;
 
       case 'error':
@@ -193,6 +224,10 @@ class ClaudeProcess {
         break;
 
       case 'content_block_delta':
+        // content_block_delta only occurs during live streaming, never during replay
+        if (this.isReplayingHistory) {
+          this.finalizeReplay();
+        }
         if (event.delta?.type === 'text_delta') {
           this.callbacks.onChunk({
             sessionId: this.sessionId,
@@ -216,14 +251,33 @@ class ClaudeProcess {
 
       case 'message_stop':
         console.log('[Claude CLI] message_stop event');
-        this.callbacks.onComplete({
-          sessionId: this.sessionId
-        });
+        if (!this.isReplayingHistory) {
+          this.callbacks.onComplete({
+            sessionId: this.sessionId
+          });
+        }
         break;
 
       case 'user':
         if (event.message && event.message.content) {
           console.log('[Claude CLI] user event content:', event.message.content);
+          if (this.isReplayingHistory) {
+            // Cancel debounce timer — more replay events are still arriving
+            if (this.replayTimer) { clearTimeout(this.replayTimer); this.replayTimer = null; }
+            const content = event.message.content;
+            let text = '';
+            if (typeof content === 'string') {
+              text = content;
+            } else if (Array.isArray(content)) {
+              text = content
+                .filter(block => block.type === 'text' && block.text)
+                .map(block => block.text)
+                .join('');
+            }
+            if (text) {
+              this.historyMessages.push({ role: 'user', text });
+            }
+          }
         }
         break;
 
@@ -232,7 +286,31 @@ class ClaudeProcess {
     }
   }
 
+  /**
+   * End history replay mode and emit final collected history
+   */
+  finalizeReplay() {
+    if (!this.isReplayingHistory) return;
+    if (this.replayTimer) {
+      clearTimeout(this.replayTimer);
+      this.replayTimer = null;
+    }
+    this.isReplayingHistory = false;
+    console.log(`[Claude CLI] Replay finalized with ${this.historyMessages.length} messages`);
+    if (this.callbacks.onHistory && this.historyMessages.length > 0) {
+      this.callbacks.onHistory({
+        sessionId: this.sessionId,
+        messages: [...this.historyMessages]
+      });
+    }
+    this.historyMessages = [];
+  }
+
   sendMessage(message) {
+    // If still in replay mode when user sends a message, finalize first
+    if (this.isReplayingHistory) {
+      this.finalizeReplay();
+    }
     if (this.process && this.process.stdin.writable) {
       const messageObj = {
         type: 'user',
@@ -247,6 +325,11 @@ class ClaudeProcess {
 
 
   stop() {
+    if (this.replayTimer) {
+      clearTimeout(this.replayTimer);
+      this.replayTimer = null;
+    }
+
     if (this.process) {
       this.process.kill('SIGTERM');
       this.process = null;
