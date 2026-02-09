@@ -19,6 +19,7 @@ const ALLOWED_CHANNELS = [
   'worktree:cleanup',
   'claude:session-start',
   'claude:session-stop',
+  'claude:session-delete',
   'claude:session-list',
   'claude:send-message',
   'claude:permission-respond',
@@ -29,6 +30,7 @@ const ALLOWED_CHANNELS = [
   'claude:session-exited',
   'claude:conversation-history',
   'claude:session-get-history',
+  'claude:session-save-messages',
   'app:get-version',
   'app:quit'
 ];

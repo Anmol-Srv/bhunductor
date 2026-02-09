@@ -10,6 +10,7 @@ function BranchItem({
   onDelete,
   onStartSession,
   onOpenSession,
+  onDeleteSession,
   menuOpen,
   onMenuToggle
 }) {
@@ -67,6 +68,16 @@ function BranchItem({
       >
         <span className="session-label">Session {sessId.slice(0, 8)}</span>
         <span className={`session-status-badge ${session.status}`}>{session.status}</span>
+        <button
+          className="session-delete-btn"
+          title="Delete session"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDeleteSession(sessId, worktree.id);
+          }}
+        >
+          <Trash2 size={12} />
+        </button>
       </div>
     );
   };

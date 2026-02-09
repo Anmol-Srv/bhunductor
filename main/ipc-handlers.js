@@ -200,12 +200,32 @@ function registerIPCHandlers(configManager, mainWindow) {
     }
   });
 
+  ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_SAVE_MESSAGES, async (event, sessionId, messages) => {
+    try {
+      claudeManager.saveSessionMessages(sessionId, messages);
+      return { success: true };
+    } catch (error) {
+      console.error('[IPC] Error saving session messages:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_STOP, async (event, sessionId) => {
     try {
       claudeManager.stopSession(sessionId);
       return { success: true };
     } catch (error) {
       console.error('[IPC] Error stopping Claude session:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_DELETE, async (event, sessionId) => {
+    try {
+      claudeManager.deleteSession(sessionId);
+      return { success: true };
+    } catch (error) {
+      console.error('[IPC] Error deleting Claude session:', error);
       return { success: false, error: error.message };
     }
   });

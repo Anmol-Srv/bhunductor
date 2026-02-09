@@ -20,6 +20,7 @@ const IPC_CHANNELS = {
 
   CLAUDE_SESSION_START: 'claude:session-start',
   CLAUDE_SESSION_STOP: 'claude:session-stop',
+  CLAUDE_SESSION_DELETE: 'claude:session-delete',
   CLAUDE_SESSION_LIST: 'claude:session-list',
   CLAUDE_SEND_MESSAGE: 'claude:send-message',
   CLAUDE_PERMISSION_RESPOND: 'claude:permission-respond',
@@ -30,6 +31,7 @@ const IPC_CHANNELS = {
   CLAUDE_SESSION_EXITED: 'claude:session-exited',
   CLAUDE_CONVERSATION_HISTORY: 'claude:conversation-history',
   CLAUDE_SESSION_GET_HISTORY: 'claude:session-get-history',
+  CLAUDE_SESSION_SAVE_MESSAGES: 'claude:session-save-messages',
 
   APP_GET_VERSION: 'app:get-version',
   APP_QUIT: 'app:quit'

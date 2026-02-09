@@ -572,6 +572,29 @@ body {
   background-color: rgba(220, 53, 69, 0.1);
 }
 
+.session-delete-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  padding: 2px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.session-item.inactive:hover .session-delete-btn {
+  display: flex;
+}
+
+.session-delete-btn:hover {
+  color: var(--error);
+  background-color: rgba(220, 53, 69, 0.1);
+}
+
 .new-session-btn {
   display: flex;
   align-items: center;

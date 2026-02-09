@@ -32,6 +32,12 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
     const unsubscribe = window.electron.on('claude:session-exited', (data) => {
       const { sessionId } = data;
 
+      // Persist messages to DB before clearing cache
+      const cachedMessages = ClaudeChat.getCache(sessionId);
+      if (cachedMessages.length > 0) {
+        window.electron.invoke('claude:session-save-messages', sessionId, cachedMessages).catch(() => {});
+      }
+
       // Clear message cache for dead session
       ClaudeChat.clearCache(sessionId);
 
@@ -83,7 +89,34 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
         setActiveWorktree(active);
 
         // Load sessions for all worktrees
-        loadAllSessions(result.worktrees);
+        const sessMap = await loadAllSessions(result.worktrees);
+
+        // Auto-restore: start a --continue session for the active worktree
+        // if there's a previous session with a claude_session_id
+        if (active) {
+          const worktreeSessions = sessMap[active.id] || [];
+          const restorable = worktreeSessions.find(s => s.claude_session_id);
+          if (restorable) {
+            try {
+              const startResult = await window.electron.invoke(
+                'claude:session-start', folder.id, active.id
+              );
+              if (startResult.success) {
+                const session = startResult.session;
+                sessMap[active.id] = [...worktreeSessions, session];
+                setSessionsByWorktree({ ...sessMap });
+                setOpenTabs([{
+                  sessionId: session.sessionId,
+                  worktreeId: active.id,
+                  branchName: active.branch_name
+                }]);
+                setActiveTabId(session.sessionId);
+              }
+            } catch (err) {
+              console.error('Auto-restore session failed:', err);
+            }
+          }
+        }
       }
     } catch (error) {
       console.error('Error initializing worktrees:', error);
@@ -96,13 +129,10 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
     const sessMap = {};
     for (const wt of worktreeList) {
       const result = await window.electron.invoke('claude:session-list', folder.id, wt.id);
-      if (result.success) {
-        sessMap[wt.id] = result.sessions;
-      } else {
-        sessMap[wt.id] = [];
-      }
+      sessMap[wt.id] = result.success ? result.sessions : [];
     }
     setSessionsByWorktree(sessMap);
+    return sessMap;
   };
 
   const handleCreateBranch = async (branchName) => {
@@ -157,7 +187,7 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
     const result = await window.electron.invoke('worktree:list', folder.id);
     if (result.success) {
       setWorktrees(result.worktrees);
-      loadAllSessions(result.worktrees);
+      await loadAllSessions(result.worktrees);
     }
   };
 
@@ -244,11 +274,43 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
     setActiveTabId(sessionId);
   }, [openTabs, sessionsByWorktree, handleStartSession]);
 
+  const handleDeleteSession = useCallback(async (sessionId, worktreeId) => {
+    const result = await window.electron.invoke('claude:session-delete', sessionId);
+    if (result.success) {
+      // Remove from sessionsByWorktree
+      setSessionsByWorktree(prev => {
+        const list = prev[worktreeId] || [];
+        return { ...prev, [worktreeId]: list.filter(s => (s.sessionId || s.id) !== sessionId) };
+      });
+      // Remove from openTabs if present
+      setOpenTabs(prev => {
+        const filtered = prev.filter(t => t.sessionId !== sessionId);
+        if (filtered.length !== prev.length) {
+          setActiveTabId(currentActive => {
+            if (currentActive === sessionId) {
+              const oldIdx = prev.findIndex(t => t.sessionId === sessionId);
+              const newTab = filtered[Math.min(oldIdx, filtered.length - 1)];
+              return newTab?.sessionId || null;
+            }
+            return currentActive;
+          });
+        }
+        return filtered;
+      });
+    }
+  }, []);
+
   const handleSwitchTab = useCallback((sessionId) => {
     setActiveTabId(sessionId);
   }, []);
 
   const handleCloseTab = useCallback((sessionId, shouldStop) => {
+    // Persist messages to DB before closing
+    const cachedMessages = ClaudeChat.getCache(sessionId);
+    if (cachedMessages.length > 0) {
+      window.electron.invoke('claude:session-save-messages', sessionId, cachedMessages).catch(() => {});
+    }
+
     if (shouldStop) {
       ClaudeChat.clearCache(sessionId);
       window.electron.invoke('claude:session-stop', sessionId).then(result => {
@@ -307,6 +369,7 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
           onDeleteBranch={handleDeleteBranch}
           onStartSession={handleStartSession}
           onOpenSession={handleOpenSession}
+          onDeleteSession={handleDeleteSession}
           sessionsByWorktree={sessionsByWorktree}
           openTabs={openTabs}
         />

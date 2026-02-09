@@ -62,9 +62,12 @@ function ClaudeChat({ sessionId }) {
     };
   }, [sessionId]);
 
-  // Sync messages to module-level cache
+  // Sync messages to module-level cache and persist to DB
   useEffect(() => {
     messageCache.set(sessionId, messages);
+    if (messages.length > 0) {
+      window.electron.invoke('claude:session-save-messages', sessionId, messages).catch(() => {});
+    }
   }, [sessionId, messages]);
 
   useEffect(() => {
@@ -152,6 +155,9 @@ function ClaudeChat({ sessionId }) {
     </div>
   );
 }
+
+// Get cached messages for a session (for persisting before stop/exit)
+ClaudeChat.getCache = (sessionId) => messageCache.get(sessionId) || [];
 
 // Clear cache entry when a session is fully stopped
 ClaudeChat.clearCache = (sessionId) => messageCache.delete(sessionId);

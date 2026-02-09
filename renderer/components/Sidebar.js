@@ -12,6 +12,7 @@ function Sidebar({
   onDeleteBranch,
   onStartSession,
   onOpenSession,
+  onDeleteSession,
   sessionsByWorktree,
   openTabs
 }) {
@@ -50,6 +51,7 @@ function Sidebar({
                 onDelete={() => onDeleteBranch(worktree.id, worktree.branch_name)}
                 onStartSession={onStartSession}
                 onOpenSession={onOpenSession}
+                onDeleteSession={onDeleteSession}
                 menuOpen={menuOpen === worktree.id}
                 onMenuToggle={() => setMenuOpen(menuOpen === worktree.id ? null : worktree.id)}
               />

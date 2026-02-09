@@ -13,6 +13,7 @@ class ClaudeProcess {
     this.claudeSessionId = null;
     this.isReplayingHistory = !!(options.resumeSessionId || options.continueSession);
     this.historyMessages = [];
+    this.replayTimer = null; // Debounce timer for end-of-replay detection
   }
 
   start() {
@@ -140,6 +141,8 @@ class ClaudeProcess {
             : [event.message.content];
 
           if (this.isReplayingHistory) {
+            // Cancel debounce timer — more replay events are still arriving
+            if (this.replayTimer) { clearTimeout(this.replayTimer); this.replayTimer = null; }
             // Collect assistant text for history replay
             const texts = [];
             for (const contentBlock of contentArray) {
@@ -176,14 +179,16 @@ class ClaudeProcess {
           output_tokens: event?.output_tokens
         });
         if (this.isReplayingHistory) {
-          this.isReplayingHistory = false;
-          if (this.callbacks.onHistory) {
+          // Emit progressive history update (don't end replay — more turns may follow)
+          if (this.callbacks.onHistory && this.historyMessages.length > 0) {
             this.callbacks.onHistory({
               sessionId: this.sessionId,
-              messages: this.historyMessages
+              messages: [...this.historyMessages]
             });
           }
-          this.historyMessages = [];
+          // Debounce: if no more replay events arrive within 500ms, finalize
+          if (this.replayTimer) clearTimeout(this.replayTimer);
+          this.replayTimer = setTimeout(() => this.finalizeReplay(), 500);
         } else {
           this.callbacks.onComplete({
             sessionId: this.sessionId
@@ -219,6 +224,10 @@ class ClaudeProcess {
         break;
 
       case 'content_block_delta':
+        // content_block_delta only occurs during live streaming, never during replay
+        if (this.isReplayingHistory) {
+          this.finalizeReplay();
+        }
         if (event.delta?.type === 'text_delta') {
           this.callbacks.onChunk({
             sessionId: this.sessionId,
@@ -253,6 +262,8 @@ class ClaudeProcess {
         if (event.message && event.message.content) {
           console.log('[Claude CLI] user event content:', event.message.content);
           if (this.isReplayingHistory) {
+            // Cancel debounce timer — more replay events are still arriving
+            if (this.replayTimer) { clearTimeout(this.replayTimer); this.replayTimer = null; }
             const content = event.message.content;
             let text = '';
             if (typeof content === 'string') {
@@ -275,7 +286,31 @@ class ClaudeProcess {
     }
   }
 
+  /**
+   * End history replay mode and emit final collected history
+   */
+  finalizeReplay() {
+    if (!this.isReplayingHistory) return;
+    if (this.replayTimer) {
+      clearTimeout(this.replayTimer);
+      this.replayTimer = null;
+    }
+    this.isReplayingHistory = false;
+    console.log(`[Claude CLI] Replay finalized with ${this.historyMessages.length} messages`);
+    if (this.callbacks.onHistory && this.historyMessages.length > 0) {
+      this.callbacks.onHistory({
+        sessionId: this.sessionId,
+        messages: [...this.historyMessages]
+      });
+    }
+    this.historyMessages = [];
+  }
+
   sendMessage(message) {
+    // If still in replay mode when user sends a message, finalize first
+    if (this.isReplayingHistory) {
+      this.finalizeReplay();
+    }
     if (this.process && this.process.stdin.writable) {
       const messageObj = {
         type: 'user',
@@ -290,6 +325,11 @@ class ClaudeProcess {
 
 
   stop() {
+    if (this.replayTimer) {
+      clearTimeout(this.replayTimer);
+      this.replayTimer = null;
+    }
+
     if (this.process) {
       this.process.kill('SIGTERM');
       this.process = null;
