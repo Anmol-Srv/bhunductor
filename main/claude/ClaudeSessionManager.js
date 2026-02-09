@@ -78,6 +78,7 @@ class ClaudeSessionManager {
 
   createSession(folderId, worktreeId, targetClaudeSessionId = null) {
     const sessionId = uuidv4();
+    const db = getDatabase();
     let deletedSessionIds = [];
     let previousMessages = [];
 
@@ -129,6 +130,20 @@ class ClaudeSessionManager {
           try { previousMessages = JSON.parse(lastSession.messages); } catch (e) { }
         }
         console.log('[ClaudeSessionManager] Continuing previous session on branch');
+
+        // Delete old DB rows with the same claude_session_id to avoid duplicates on restart
+        const oldRows = db.prepare(`
+          SELECT id FROM claude_sessions
+          WHERE claude_session_id = ? AND status IN ('exited', 'stopped')
+        `).all(lastSession.claude_session_id);
+        deletedSessionIds = oldRows.map(r => r.id);
+        if (deletedSessionIds.length > 0) {
+          db.prepare(`
+            DELETE FROM claude_sessions
+            WHERE claude_session_id = ? AND status IN ('exited', 'stopped')
+          `).run(lastSession.claude_session_id);
+          console.log(`[ClaudeSessionManager] Deleted ${deletedSessionIds.length} old DB row(s) for continued session`);
+        }
       }
     }
 
@@ -166,7 +181,6 @@ class ClaudeSessionManager {
     this.activeSessions.set(sessionId, claudeProcess);
 
     // Save to database
-    const db = getDatabase();
     db.prepare(`
       INSERT INTO claude_sessions (id, folder_id, worktree_id, status)
       VALUES (?, ?, ?, 'active')
