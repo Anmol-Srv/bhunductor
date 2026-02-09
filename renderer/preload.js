@@ -27,6 +27,8 @@ const ALLOWED_CHANNELS = [
   'claude:permission-request',
   'claude:session-error',
   'claude:session-exited',
+  'claude:conversation-history',
+  'claude:session-get-history',
   'app:get-version',
   'app:quit'
 ];

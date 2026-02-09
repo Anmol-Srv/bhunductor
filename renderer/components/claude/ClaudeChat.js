@@ -41,11 +41,24 @@ function ClaudeChat({ sessionId }) {
       alert(`Claude Error: ${data.error}`);
     });
 
+    const unsubscribeHistory = window.electron.on('claude:conversation-history', (data) => {
+      if (data?.sessionId !== sessionId) return;
+      setMessages(data.messages);
+    });
+
+    // Pull any buffered history that arrived before this component mounted
+    window.electron.invoke('claude:session-get-history', sessionId).then(result => {
+      if (result?.success && result.messages && result.messages.length > 0) {
+        setMessages(result.messages);
+      }
+    }).catch(() => { });
+
     return () => {
       unsubscribeChunk();
       unsubscribeComplete();
       unsubscribePermission();
       unsubscribeError();
+      unsubscribeHistory();
     };
   }, [sessionId]);
 

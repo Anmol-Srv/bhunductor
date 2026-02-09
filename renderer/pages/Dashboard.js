@@ -35,11 +35,15 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
       // Clear message cache for dead session
       ClaudeChat.clearCache(sessionId);
 
-      // Remove from sessionsByWorktree
+      // Update session status in sessionsByWorktree (keep it, mark as exited)
       setSessionsByWorktree(prev => {
         const next = { ...prev };
         for (const wtId of Object.keys(next)) {
-          next[wtId] = next[wtId].filter(s => s.sessionId !== sessionId);
+          next[wtId] = next[wtId].map(s =>
+            (s.sessionId || s.id) === sessionId
+              ? { ...s, status: 'exited' }
+              : s
+          );
         }
         return next;
       });
@@ -166,7 +170,7 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
     setSidebarCollapsed(!sidebarCollapsed);
   };
 
-  const handleStartSession = async (worktreeId) => {
+  const handleStartSession = useCallback(async (worktreeId, claudeSessionId = null) => {
     const targetWorktree = worktrees.find(w => w.id === worktreeId);
     if (!targetWorktree) {
       console.error('Worktree not found:', worktreeId);
@@ -179,16 +183,20 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
       await window.electron.invoke('worktree:set-active', folder.id, worktreeId);
     }
 
-    const result = await window.electron.invoke('claude:session-start', folder.id, worktreeId);
+    const result = await window.electron.invoke('claude:session-start', folder.id, worktreeId, claudeSessionId);
 
     if (result.success) {
       const session = result.session;
+      const deletedIds = result.deletedSessionIds || [];
 
-      // Add to sessionsByWorktree
-      setSessionsByWorktree(prev => ({
-        ...prev,
-        [worktreeId]: [...(prev[worktreeId] || []), session]
-      }));
+      // Add to sessionsByWorktree, removing any old entries that were deleted on resume
+      setSessionsByWorktree(prev => {
+        const existing = prev[worktreeId] || [];
+        const filtered = deletedIds.length > 0
+          ? existing.filter(s => !deletedIds.includes(s.sessionId || s.id))
+          : existing;
+        return { ...prev, [worktreeId]: [...filtered, session] };
+      });
 
       // Add to openTabs and set as active
       const newTab = {
@@ -202,9 +210,9 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
       console.error('Failed to start session:', result.error);
       alert(`Failed to start Claude session: ${result.error}`);
     }
-  };
+  }, [worktrees, activeWorktree, folder]);
 
-  const handleOpenSession = useCallback((sessionId, worktreeId, branchName) => {
+  const handleOpenSession = useCallback(async (sessionId, worktreeId, branchName) => {
     // Check if already open as a tab
     const existing = openTabs.find(t => t.sessionId === sessionId);
     if (existing) {
@@ -212,11 +220,29 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
       return;
     }
 
-    // Add new tab
+    // Check if this session is still active (has a running process)
+    const sessions = sessionsByWorktree[worktreeId] || [];
+    const session = sessions.find(s => (s.sessionId || s.id) === sessionId);
+
+    if (session && session.status !== 'active') {
+      // Past session — resume it by starting a new process with --resume
+      const oldSessionId = session.sessionId || session.id;
+      await handleStartSession(worktreeId, session.claude_session_id);
+      // Remove the old inactive entry if backend didn't delete it (e.g. no claude_session_id)
+      setSessionsByWorktree(prev => {
+        const list = prev[worktreeId] || [];
+        const alreadyRemoved = !list.some(s => (s.sessionId || s.id) === oldSessionId);
+        if (alreadyRemoved) return prev;
+        return { ...prev, [worktreeId]: list.filter(s => (s.sessionId || s.id) !== oldSessionId) };
+      });
+      return;
+    }
+
+    // Active session — just open its tab
     const newTab = { sessionId, worktreeId, branchName };
     setOpenTabs(prev => [...prev, newTab]);
     setActiveTabId(sessionId);
-  }, [openTabs]);
+  }, [openTabs, sessionsByWorktree, handleStartSession]);
 
   const handleSwitchTab = useCallback((sessionId) => {
     setActiveTabId(sessionId);
@@ -227,11 +253,15 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
       ClaudeChat.clearCache(sessionId);
       window.electron.invoke('claude:session-stop', sessionId).then(result => {
         if (result.success) {
-          // Remove from sessionsByWorktree
+          // Mark session as stopped in sessionsByWorktree (keep it visible)
           setSessionsByWorktree(prev => {
             const next = { ...prev };
             for (const wtId of Object.keys(next)) {
-              next[wtId] = next[wtId].filter(s => s.sessionId !== sessionId);
+              next[wtId] = next[wtId].map(s =>
+                (s.sessionId || s.id) === sessionId
+                  ? { ...s, status: 'stopped' }
+                  : s
+              );
             }
             return next;
           });

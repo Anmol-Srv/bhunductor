@@ -28,6 +28,8 @@ const IPC_CHANNELS = {
   CLAUDE_PERMISSION_REQUEST: 'claude:permission-request',
   CLAUDE_SESSION_ERROR: 'claude:session-error',
   CLAUDE_SESSION_EXITED: 'claude:session-exited',
+  CLAUDE_CONVERSATION_HISTORY: 'claude:conversation-history',
+  CLAUDE_SESSION_GET_HISTORY: 'claude:session-get-history',
 
   APP_GET_VERSION: 'app:get-version',
   APP_QUIT: 'app:quit'
