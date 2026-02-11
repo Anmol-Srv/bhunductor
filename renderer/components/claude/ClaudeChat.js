@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send } from 'lucide-react';
+import { Send, AlertCircle } from 'lucide-react';
+import MarkdownRenderer from './MarkdownRenderer';
+import ToolUseBlock from './ToolUseBlock';
+import ThinkingBlock from './ThinkingBlock';
+import TurnCostBadge from './TurnCostBadge';
 import PermissionPrompt from './PermissionPrompt';
 
 // Module-level cache: survives component mount/unmount cycles
@@ -14,51 +18,178 @@ function ClaudeChat({ sessionId }) {
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
-    const unsubscribeChunk = window.electron.on('claude:message-chunk', (data) => {
+    // Text streaming chunks
+    const unsubChunk = window.electron.on('claude:message-chunk', (data) => {
       if (data?.sessionId !== sessionId) return;
       setIsStreaming(true);
       setStreamingMessage(prev => prev + (data?.text || ''));
     });
 
-    const unsubscribeComplete = window.electron.on('claude:message-complete', (data) => {
+    // Message complete — commit streaming text to messages
+    const unsubComplete = window.electron.on('claude:message-complete', (data) => {
       if (data?.sessionId !== sessionId) return;
       setIsStreaming(false);
       setStreamingMessage(currentMsg => {
         if (currentMsg) {
-          setMessages(prev => [...prev, { role: 'assistant', text: currentMsg }]);
+          setMessages(prev => [...prev, {
+            id: crypto.randomUUID(), role: 'assistant', type: 'text', text: currentMsg
+          }]);
         }
         return '';
       });
     });
 
-    const unsubscribePermission = window.electron.on('claude:permission-request', (data) => {
+    // Tool use events (start + input update)
+    const unsubToolUse = window.electron.on('claude:tool-use', (data) => {
+      if (data?.sessionId !== sessionId) return;
+      // Commit any streaming text before showing tool block
+      setStreamingMessage(currentMsg => {
+        if (currentMsg) {
+          setMessages(prev => [...prev, {
+            id: crypto.randomUUID(), role: 'assistant', type: 'text', text: currentMsg
+          }]);
+        }
+        return '';
+      });
+      setMessages(prev => {
+        const idx = prev.findIndex(m => m.type === 'tool_use' && m.toolUseId === data.toolUseId);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = {
+            ...updated[idx],
+            toolInput: data.toolInput || updated[idx].toolInput,
+            status: data.status
+          };
+          return updated;
+        }
+        return [...prev, {
+          id: data.toolUseId,
+          role: 'assistant',
+          type: 'tool_use',
+          toolUseId: data.toolUseId,
+          toolName: data.toolName,
+          toolInput: data.toolInput,
+          status: data.status || 'running'
+        }];
+      });
+    });
+
+    // Tool result events — attach to matching tool_use
+    const unsubToolResult = window.electron.on('claude:tool-result', (data) => {
+      if (data?.sessionId !== sessionId) return;
+      setMessages(prev => prev.map(m => {
+        if (m.type === 'tool_use' && m.toolUseId === data.toolUseId) {
+          return {
+            ...m,
+            result: data.result,
+            isError: data.isError,
+            status: data.isError ? 'error' : 'complete'
+          };
+        }
+        return m;
+      }));
+    });
+
+    // Thinking events
+    const unsubThinking = window.electron.on('claude:thinking', (data) => {
+      if (data?.sessionId !== sessionId) return;
+      if (data.isPartial) {
+        setMessages(prev => {
+          const lastIdx = prev.length - 1;
+          if (lastIdx >= 0 && prev[lastIdx].type === 'thinking' && prev[lastIdx].isPartial) {
+            const updated = [...prev];
+            updated[lastIdx] = {
+              ...updated[lastIdx],
+              thinking: updated[lastIdx].thinking + data.thinking
+            };
+            return updated;
+          }
+          return [...prev, {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            type: 'thinking',
+            thinking: data.thinking,
+            isPartial: true
+          }];
+        });
+      } else {
+        setMessages(prev => {
+          const lastIdx = prev.length - 1;
+          if (lastIdx >= 0 && prev[lastIdx].type === 'thinking' && prev[lastIdx].isPartial) {
+            const updated = [...prev];
+            updated[lastIdx] = {
+              ...updated[lastIdx],
+              thinking: data.thinking,
+              isPartial: false
+            };
+            return updated;
+          }
+          return [...prev, {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            type: 'thinking',
+            thinking: data.thinking,
+            isPartial: false
+          }];
+        });
+      }
+    });
+
+    // Turn complete (cost/usage)
+    const unsubTurnComplete = window.electron.on('claude:turn-complete', (data) => {
+      if (data?.sessionId !== sessionId) return;
+      if (data.costUsd || data.usage) {
+        setMessages(prev => [...prev, {
+          id: crypto.randomUUID(),
+          role: 'system',
+          type: 'result',
+          costUsd: data.costUsd,
+          usage: data.usage,
+          durationMs: data.durationMs
+        }]);
+      }
+    });
+
+    // Permission requests
+    const unsubPermission = window.electron.on('claude:permission-request', (data) => {
       if (data?.session_id !== sessionId && data?.sessionId !== sessionId) return;
       setPermissionQueue(prev => [...prev, data]);
     });
 
-    const unsubscribeError = window.electron.on('claude:session-error', (data) => {
+    // Errors — show inline instead of alert
+    const unsubError = window.electron.on('claude:session-error', (data) => {
       if (data?.sessionId !== sessionId) return;
-      alert(`Claude Error: ${data.error}`);
+      setMessages(prev => [...prev, {
+        id: crypto.randomUUID(),
+        role: 'system',
+        type: 'error',
+        text: data.error
+      }]);
     });
 
-    const unsubscribeHistory = window.electron.on('claude:conversation-history', (data) => {
+    // Conversation history (from resume/continue)
+    const unsubHistory = window.electron.on('claude:conversation-history', (data) => {
       if (data?.sessionId !== sessionId) return;
-      setMessages(data.messages);
+      setMessages(data.messages || []);
     });
 
-    // Pull any buffered history that arrived before this component mounted
+    // Pull buffered history on mount
     window.electron.invoke('claude:session-get-history', sessionId).then(result => {
       if (result?.success && result.messages && result.messages.length > 0) {
         setMessages(result.messages);
       }
-    }).catch(() => { });
+    }).catch(() => {});
 
     return () => {
-      unsubscribeChunk();
-      unsubscribeComplete();
-      unsubscribePermission();
-      unsubscribeError();
-      unsubscribeHistory();
+      unsubChunk();
+      unsubComplete();
+      unsubToolUse();
+      unsubToolResult();
+      unsubThinking();
+      unsubTurnComplete();
+      unsubPermission();
+      unsubError();
+      unsubHistory();
     };
   }, [sessionId]);
 
@@ -70,20 +201,24 @@ function ClaudeChat({ sessionId }) {
     }
   }, [sessionId, messages]);
 
+  // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingMessage]);
 
   const handleSendMessage = async () => {
     if (!input.trim()) return;
-
     const userMessage = input;
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
-
+    setMessages(prev => [...prev, {
+      id: crypto.randomUUID(), role: 'user', type: 'text', text: userMessage
+    }]);
     const result = await window.electron.invoke('claude:send-message', sessionId, userMessage);
     if (!result.success) {
-      alert(`Failed to send message: ${result.error}`);
+      setMessages(prev => [...prev, {
+        id: crypto.randomUUID(), role: 'system', type: 'error',
+        text: `Failed to send: ${result.error}`
+      }]);
     }
   };
 
@@ -91,7 +226,6 @@ function ClaudeChat({ sessionId }) {
 
   const handlePermissionResponse = async (approved) => {
     if (!activePermission) return;
-
     const result = await window.electron.invoke(
       'claude:permission-respond',
       activePermission.requestId,
@@ -102,18 +236,118 @@ function ClaudeChat({ sessionId }) {
     }
   };
 
+  const renderMessage = (msg, idx) => {
+    switch (msg.type) {
+      case 'text':
+        if (msg.role === 'user') {
+          return (
+            <div key={msg.id || idx} className="message user">
+              <div className="message-content">{msg.text}</div>
+            </div>
+          );
+        }
+        return (
+          <div key={msg.id || idx} className="message assistant">
+            <div className="message-content">
+              <MarkdownRenderer content={msg.text} />
+            </div>
+          </div>
+        );
+
+      case 'tool_use':
+        return (
+          <ToolUseBlock
+            key={msg.toolUseId || idx}
+            toolName={msg.toolName}
+            toolInput={msg.toolInput}
+            toolUseId={msg.toolUseId}
+            status={msg.status}
+            result={msg.result}
+            isError={msg.isError}
+          />
+        );
+
+      case 'tool_result':
+        return (
+          <div key={msg.id || idx} className="message tool-result-standalone">
+            <div className="message-content">
+              <pre className="tool-result-text">
+                {typeof msg.result === 'string' ? msg.result : JSON.stringify(msg.result, null, 2)}
+              </pre>
+            </div>
+          </div>
+        );
+
+      case 'thinking':
+        return (
+          <ThinkingBlock
+            key={msg.id || idx}
+            thinking={msg.thinking}
+            isPartial={msg.isPartial}
+          />
+        );
+
+      case 'error':
+        return (
+          <div key={msg.id || idx} className="message error-message">
+            <AlertCircle size={16} />
+            <span>{msg.text}</span>
+          </div>
+        );
+
+      case 'result':
+        return (
+          <TurnCostBadge
+            key={msg.id || idx}
+            costUsd={msg.costUsd}
+            usage={msg.usage}
+            durationMs={msg.durationMs}
+          />
+        );
+
+      default:
+        // Legacy messages without type field (backward compat)
+        if (msg.role === 'user') {
+          return (
+            <div key={msg.id || idx} className="message user">
+              <div className="message-content">{msg.text}</div>
+            </div>
+          );
+        }
+        return (
+          <div key={msg.id || idx} className="message assistant">
+            <div className="message-content">
+              <MarkdownRenderer content={msg.text || ''} />
+            </div>
+          </div>
+        );
+    }
+  };
+
   return (
     <div className="claude-chat">
       <div className="message-list">
-        {messages.map((msg, idx) => (
-          <div key={idx} className={`message ${msg.role}`}>
-            <div className="message-content">{msg.text}</div>
-          </div>
-        ))}
+        {messages.map(renderMessage)}
 
         {isStreaming && streamingMessage && (
           <div className="message assistant streaming">
-            <div className="message-content">{streamingMessage}</div>
+            <div className="message-content">
+              <MarkdownRenderer content={streamingMessage} />
+              <span className="streaming-cursor"></span>
+            </div>
+          </div>
+        )}
+
+        {activePermission && (
+          <div className="message permission-inline">
+            <PermissionPrompt
+              tool={activePermission.tool}
+              input={activePermission.input}
+              sessionId={activePermission.session_id}
+              toolUseId={activePermission.tool_use_id}
+              onApprove={() => handlePermissionResponse(true)}
+              onDeny={() => handlePermissionResponse(false)}
+            />
           </div>
         )}
 
@@ -141,17 +375,6 @@ function ClaudeChat({ sessionId }) {
           <Send size={20} />
         </button>
       </div>
-
-      {activePermission && (
-        <PermissionPrompt
-          tool={activePermission.tool}
-          input={activePermission.input}
-          sessionId={activePermission.session_id}
-          toolUseId={activePermission.tool_use_id}
-          onApprove={() => handlePermissionResponse(true)}
-          onDeny={() => handlePermissionResponse(false)}
-        />
-      )}
     </div>
   );
 }

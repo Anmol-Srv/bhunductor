@@ -32,6 +32,10 @@ const IPC_CHANNELS = {
   CLAUDE_CONVERSATION_HISTORY: 'claude:conversation-history',
   CLAUDE_SESSION_GET_HISTORY: 'claude:session-get-history',
   CLAUDE_SESSION_SAVE_MESSAGES: 'claude:session-save-messages',
+  CLAUDE_TOOL_USE: 'claude:tool-use',
+  CLAUDE_TOOL_RESULT: 'claude:tool-result',
+  CLAUDE_THINKING: 'claude:thinking',
+  CLAUDE_TURN_COMPLETE: 'claude:turn-complete',
 
   APP_GET_VERSION: 'app:get-version',
   APP_QUIT: 'app:quit'

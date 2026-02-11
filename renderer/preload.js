@@ -31,6 +31,10 @@ const ALLOWED_CHANNELS = [
   'claude:conversation-history',
   'claude:session-get-history',
   'claude:session-save-messages',
+  'claude:tool-use',
+  'claude:tool-result',
+  'claude:thinking',
+  'claude:turn-complete',
   'app:get-version',
   'app:quit'
 ];

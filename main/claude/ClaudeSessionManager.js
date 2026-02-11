@@ -174,6 +174,18 @@ class ClaudeSessionManager {
         // Buffer history so it can be pulled by the renderer on mount
         this.historyBuffer.set(sessionId, data.messages || []);
         this.mainWindow.webContents.send('claude:conversation-history', data);
+      },
+      onToolUse: (data) => {
+        this.mainWindow.webContents.send('claude:tool-use', data);
+      },
+      onToolResult: (data) => {
+        this.mainWindow.webContents.send('claude:tool-result', data);
+      },
+      onThinking: (data) => {
+        this.mainWindow.webContents.send('claude:thinking', data);
+      },
+      onTurnComplete: (data) => {
+        this.mainWindow.webContents.send('claude:turn-complete', data);
       }
     }, options);
 
