@@ -295,8 +295,17 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
       return;
     }
 
-    // Active session — just open its tab
-    const newTab = { sessionId, worktreeId, branchName };
+    // Active session — pre-seed message cache from DB if empty, then open tab
+    const cachedMessages = ClaudeChat.getCache(sessionId);
+    if (cachedMessages.length === 0 && session?.messages) {
+      try {
+        const parsed = JSON.parse(session.messages);
+        if (parsed.length > 0) {
+          ClaudeChat.setCache(sessionId, parsed);
+        }
+      } catch {}
+    }
+    const newTab = { sessionId, worktreeId, branchName, title: session?.title || session?.name || null };
     setOpenTabs(prev => [...prev, newTab]);
     setActiveTabId(sessionId);
   }, [openTabs, sessionsByWorktree, handleStartSession]);
@@ -306,6 +315,11 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
     if (result.success) {
       // Remove from sessionsByWorktree
       setSessionsByWorktree(prev => {
+        const list = prev[worktreeId] || [];
+        return { ...prev, [worktreeId]: list.filter(s => (s.sessionId || s.id) !== sessionId) };
+      });
+      // Remove from archivedSessionsByWorktree
+      setArchivedSessionsByWorktree(prev => {
         const list = prev[worktreeId] || [];
         return { ...prev, [worktreeId]: list.filter(s => (s.sessionId || s.id) !== sessionId) };
       });
@@ -390,6 +404,11 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
 
   const handleUnarchiveAndResume = useCallback(async (sessionId, worktreeId, branchName, claudeSessionId) => {
     await window.electron.invoke('claude:session-unarchive', sessionId);
+    // Remove from archived state immediately
+    setArchivedSessionsByWorktree(prev => {
+      const list = prev[worktreeId] || [];
+      return { ...prev, [worktreeId]: list.filter(s => (s.sessionId || s.id) !== sessionId) };
+    });
     // Now resume it like any other past session
     await handleStartSession(worktreeId, claudeSessionId);
   }, [handleStartSession]);

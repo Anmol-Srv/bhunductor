@@ -191,13 +191,27 @@ class ClaudeSessionManager {
     `).run(sessionId, folderId, worktreeId, sessionName, claudeSessionId);
 
     // Auto-archive older stopped/exited sessions on this worktree
-    db.prepare(`
-      UPDATE claude_sessions SET archived = 1
+    const autoArchivedRows = db.prepare(`
+      SELECT id FROM claude_sessions
       WHERE folder_id = ? AND worktree_id = ?
         AND id != ?
         AND status IN ('stopped', 'exited')
         AND (archived = 0 OR archived IS NULL)
-    `).run(folderId, worktreeId, sessionId);
+    `).all(folderId, worktreeId, sessionId);
+    if (autoArchivedRows.length > 0) {
+      db.prepare(`
+        UPDATE claude_sessions SET archived = 1
+        WHERE folder_id = ? AND worktree_id = ?
+          AND id != ?
+          AND status IN ('stopped', 'exited')
+          AND (archived = 0 OR archived IS NULL)
+      `).run(folderId, worktreeId, sessionId);
+      for (const row of autoArchivedRows) {
+        if (!archivedSessionIds.includes(row.id)) {
+          archivedSessionIds.push(row.id);
+        }
+      }
+    }
 
     return {
       sessionId,
@@ -375,7 +389,8 @@ class ClaudeSessionManager {
     const db = getDatabase();
     const session = db.prepare('SELECT status FROM claude_sessions WHERE id = ?').get(sessionId);
     if (!session) {
-      throw new Error(`Session ${sessionId} not found`);
+      // Already deleted — no-op
+      return;
     }
     if (session.status === 'active') {
       throw new Error('Cannot delete an active session. Stop it first.');
@@ -392,7 +407,7 @@ class ClaudeSessionManager {
       // Update database
       const db = getDatabase();
       db.prepare(`
-        UPDATE claude_sessions SET status = 'stopped' WHERE id = ?
+        UPDATE claude_sessions SET status = 'stopped', last_active_at = CURRENT_TIMESTAMP WHERE id = ?
       `).run(sessionId);
     }
   }
@@ -407,7 +422,7 @@ class ClaudeSessionManager {
     // Update database
     const db = getDatabase();
     db.prepare(`
-      UPDATE claude_sessions SET status = 'exited' WHERE id = ?
+      UPDATE claude_sessions SET status = 'exited', last_active_at = CURRENT_TIMESTAMP WHERE id = ?
     `).run(sessionId);
   }
 
