@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Send, AlertCircle } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import ToolUseBlock from './ToolUseBlock';
+import ToolCallGroup from './ToolCallGroup';
 import ThinkingBlock from './ThinkingBlock';
 import TurnCostBadge from './TurnCostBadge';
 import PermissionPrompt from './PermissionPrompt';
@@ -9,15 +10,21 @@ import PermissionPrompt from './PermissionPrompt';
 // Module-level cache: survives component mount/unmount cycles
 const messageCache = new Map();
 
-function ClaudeChat({ sessionId }) {
-  const [messages, setMessages] = useState(() => messageCache.get(sessionId) || []);
+function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onLazyResume = null, placeholderText = null }) {
+  const [messages, setMessages] = useState(() => {
+    if (isReadOnly && initialMessages) return initialMessages;
+    return messageCache.get(sessionId) || [];
+  });
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState('');
   const [permissionQueue, setPermissionQueue] = useState([]);
   const messagesEndRef = useRef(null);
 
+  // In read-only mode, skip all IPC listeners
   useEffect(() => {
+    if (isReadOnly) return;
+
     // Text streaming chunks
     const unsubChunk = window.electron.on('claude:message-chunk', (data) => {
       if (data?.sessionId !== sessionId) return;
@@ -173,12 +180,15 @@ function ClaudeChat({ sessionId }) {
       setMessages(data.messages || []);
     });
 
-    // Pull buffered history on mount
-    window.electron.invoke('claude:session-get-history', sessionId).then(result => {
-      if (result?.success && result.messages && result.messages.length > 0) {
-        setMessages(result.messages);
-      }
-    }).catch(() => {});
+    // Pull buffered history on mount (skip if we already have messages from cache seed)
+    const cached = messageCache.get(sessionId);
+    if (!cached || cached.length === 0) {
+      window.electron.invoke('claude:session-get-history', sessionId).then(result => {
+        if (result?.success && result.messages && result.messages.length > 0) {
+          setMessages(result.messages);
+        }
+      }).catch(() => {});
+    }
 
     return () => {
       unsubChunk();
@@ -193,13 +203,14 @@ function ClaudeChat({ sessionId }) {
     };
   }, [sessionId]);
 
-  // Sync messages to module-level cache and persist to DB
+  // Sync messages to module-level cache and persist to DB (skip in read-only mode)
   useEffect(() => {
+    if (isReadOnly) return;
     messageCache.set(sessionId, messages);
     if (messages.length > 0) {
       window.electron.invoke('claude:session-save-messages', sessionId, messages).catch(() => {});
     }
-  }, [sessionId, messages]);
+  }, [sessionId, messages, isReadOnly]);
 
   // Auto-scroll
   useEffect(() => {
@@ -210,6 +221,16 @@ function ClaudeChat({ sessionId }) {
     if (!input.trim()) return;
     const userMessage = input;
     setInput('');
+
+    // In read-only mode, add the user message visually then trigger lazy resume
+    if (isReadOnly && onLazyResume) {
+      setMessages(prev => [...prev, {
+        id: crypto.randomUUID(), role: 'user', type: 'text', text: userMessage
+      }]);
+      onLazyResume(userMessage);
+      return;
+    }
+
     setMessages(prev => [...prev, {
       id: crypto.randomUUID(), role: 'user', type: 'text', text: userMessage
     }]);
@@ -241,16 +262,14 @@ function ClaudeChat({ sessionId }) {
       case 'text':
         if (msg.role === 'user') {
           return (
-            <div key={msg.id || idx} className="message user">
-              <div className="message-content">{msg.text}</div>
+            <div key={msg.id || idx} className="chat-user-msg">
+              {msg.text}
             </div>
           );
         }
         return (
-          <div key={msg.id || idx} className="message assistant">
-            <div className="message-content">
-              <MarkdownRenderer content={msg.text} />
-            </div>
+          <div key={msg.id || idx} className="chat-assistant-msg">
+            <MarkdownRenderer content={msg.text} />
           </div>
         );
 
@@ -268,15 +287,7 @@ function ClaudeChat({ sessionId }) {
         );
 
       case 'tool_result':
-        return (
-          <div key={msg.id || idx} className="message tool-result-standalone">
-            <div className="message-content">
-              <pre className="tool-result-text">
-                {typeof msg.result === 'string' ? msg.result : JSON.stringify(msg.result, null, 2)}
-              </pre>
-            </div>
-          </div>
-        );
+        return null; // Results are shown inside ToolUseBlock
 
       case 'thinking':
         return (
@@ -289,8 +300,8 @@ function ClaudeChat({ sessionId }) {
 
       case 'error':
         return (
-          <div key={msg.id || idx} className="message error-message">
-            <AlertCircle size={16} />
+          <div key={msg.id || idx} className="chat-error">
+            <AlertCircle size={12} />
             <span>{msg.text}</span>
           </div>
         );
@@ -306,40 +317,71 @@ function ClaudeChat({ sessionId }) {
         );
 
       default:
-        // Legacy messages without type field (backward compat)
         if (msg.role === 'user') {
           return (
-            <div key={msg.id || idx} className="message user">
-              <div className="message-content">{msg.text}</div>
+            <div key={msg.id || idx} className="chat-user-msg">
+              {msg.text}
             </div>
           );
         }
         return (
-          <div key={msg.id || idx} className="message assistant">
-            <div className="message-content">
-              <MarkdownRenderer content={msg.text || ''} />
-            </div>
+          <div key={msg.id || idx} className="chat-assistant-msg">
+            <MarkdownRenderer content={msg.text || ''} />
           </div>
         );
     }
   };
 
+  // Group consecutive tool_use messages for collapsed rendering
+  const renderItems = useMemo(() => {
+    const items = [];
+    let toolGroup = [];
+
+    const flushToolGroup = () => {
+      if (toolGroup.length === 0) return;
+      if (toolGroup.length <= 2) {
+        // Small groups: render individually
+        items.push(...toolGroup.map(t => ({ type: 'single', msg: t })));
+      } else {
+        items.push({ type: 'tool_group', tools: [...toolGroup] });
+      }
+      toolGroup = [];
+    };
+
+    for (const msg of messages) {
+      if (msg.type === 'tool_use') {
+        toolGroup.push(msg);
+      } else if (msg.type === 'tool_result') {
+        // Skip — results are attached to tool_use
+        continue;
+      } else {
+        flushToolGroup();
+        items.push({ type: 'single', msg });
+      }
+    }
+    flushToolGroup();
+    return items;
+  }, [messages]);
+
   return (
     <div className="claude-chat">
-      <div className="message-list">
-        {messages.map(renderMessage)}
+      <div className="chat-feed">
+        {renderItems.map((item, idx) => {
+          if (item.type === 'tool_group') {
+            return <ToolCallGroup key={`tg-${idx}`} tools={item.tools} />;
+          }
+          return renderMessage(item.msg, idx);
+        })}
 
         {isStreaming && streamingMessage && (
-          <div className="message assistant streaming">
-            <div className="message-content">
-              <MarkdownRenderer content={streamingMessage} />
-              <span className="streaming-cursor"></span>
-            </div>
+          <div className="chat-assistant-msg streaming">
+            <MarkdownRenderer content={streamingMessage} />
+            <span className="streaming-cursor" />
           </div>
         )}
 
         {activePermission && (
-          <div className="message permission-inline">
+          <div className="chat-permission">
             <PermissionPrompt
               tool={activePermission.tool}
               input={activePermission.input}
@@ -354,7 +396,7 @@ function ClaudeChat({ sessionId }) {
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="message-input">
+      <div className="chat-input-bar">
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -364,15 +406,15 @@ function ClaudeChat({ sessionId }) {
               handleSendMessage();
             }
           }}
-          placeholder="Type your message..."
-          disabled={isStreaming}
+          placeholder={placeholderText || "Ask to make changes, @mention files, run /commands"}
+          disabled={isStreaming && !isReadOnly}
         />
         <button
-          className="send-btn"
+          className="chat-send-btn"
           onClick={handleSendMessage}
           disabled={!input.trim() || isStreaming}
         >
-          <Send size={20} />
+          <Send size={16} />
         </button>
       </div>
     </div>
@@ -381,6 +423,9 @@ function ClaudeChat({ sessionId }) {
 
 // Get cached messages for a session (for persisting before stop/exit)
 ClaudeChat.getCache = (sessionId) => messageCache.get(sessionId) || [];
+
+// Pre-seed cache for a session (used for lazy resume transition)
+ClaudeChat.setCache = (sessionId, messages) => messageCache.set(sessionId, messages);
 
 // Clear cache entry when a session is fully stopped
 ClaudeChat.clearCache = (sessionId) => messageCache.delete(sessionId);

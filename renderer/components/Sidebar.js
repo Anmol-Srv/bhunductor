@@ -13,7 +13,11 @@ function Sidebar({
   onStartSession,
   onOpenSession,
   onDeleteSession,
+  onArchiveSession,
+  onUnarchiveAndResume,
+  onLoadArchivedSessions,
   sessionsByWorktree,
+  archivedSessionsByWorktree,
   openTabs
 }) {
   const [menuOpen, setMenuOpen] = useState(null);
@@ -46,12 +50,16 @@ function Sidebar({
                 worktree={worktree}
                 isActive={activeWorktree?.id === worktree.id}
                 sessions={sessionsByWorktree[worktree.id] || []}
+                archivedSessions={(archivedSessionsByWorktree || {})[worktree.id] || []}
                 openTabs={openTabs || []}
                 onSelect={() => onSelectBranch(worktree)}
                 onDelete={() => onDeleteBranch(worktree.id, worktree.branch_name)}
                 onStartSession={onStartSession}
                 onOpenSession={onOpenSession}
                 onDeleteSession={onDeleteSession}
+                onArchiveSession={onArchiveSession}
+                onUnarchiveAndResume={onUnarchiveAndResume}
+                onLoadArchivedSessions={onLoadArchivedSessions}
                 menuOpen={menuOpen === worktree.id}
                 onMenuToggle={() => setMenuOpen(menuOpen === worktree.id ? null : worktree.id)}
               />

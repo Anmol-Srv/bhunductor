@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GitBranch, ChevronRight, ChevronDown, MoreVertical, Trash2, Plus } from 'lucide-react';
+import { GitBranch, ChevronRight, ChevronDown, MoreVertical, Trash2, Plus, Archive } from 'lucide-react';
 
 function BranchItem({
   worktree,
@@ -11,12 +11,16 @@ function BranchItem({
   onStartSession,
   onOpenSession,
   onDeleteSession,
+  onArchiveSession,
+  onUnarchiveAndResume,
+  onLoadArchivedSessions,
+  archivedSessions,
   menuOpen,
   onMenuToggle
 }) {
   const isMain = worktree.is_main === 1;
   const [expanded, setExpanded] = useState(isActive);
-  const [inactiveExpanded, setInactiveExpanded] = useState(false);
+  const [archiveExpanded, setArchiveExpanded] = useState(false);
 
   // Split sessions into active (running process) and inactive (stopped/exited)
   const activeSessions = sessions.filter(s => s.status === 'active');
@@ -38,6 +42,7 @@ function BranchItem({
 
   const renderActiveSession = (session) => {
     const sessId = session.sessionId || session.id;
+    const sessName = session.name || `Session ${sessId.slice(0, 8)}`;
     const isOpen = isSessionOpen(sessId);
     return (
       <div
@@ -49,7 +54,7 @@ function BranchItem({
         }}
       >
         <span className="session-active-indicator" />
-        <span className="session-label">Session {sessId.slice(0, 8)}</span>
+        <span className="session-label">{sessName}</span>
         {isOpen && <span className="session-open-dot" />}
       </div>
     );
@@ -57,6 +62,7 @@ function BranchItem({
 
   const renderInactiveSession = (session) => {
     const sessId = session.sessionId || session.id;
+    const sessName = session.name || `Session ${sessId.slice(0, 8)}`;
     return (
       <div
         key={sessId}
@@ -66,8 +72,46 @@ function BranchItem({
           onOpenSession(sessId, worktree.id, worktree.branch_name);
         }}
       >
-        <span className="session-label">Session {sessId.slice(0, 8)}</span>
+        <span className="session-label">{sessName}</span>
         <span className={`session-status-badge ${session.status}`}>{session.status}</span>
+        <button
+          className="session-action-btn"
+          title="Archive session"
+          onClick={(e) => {
+            e.stopPropagation();
+            onArchiveSession(sessId, worktree.id);
+          }}
+        >
+          <Archive size={12} />
+        </button>
+        <button
+          className="session-delete-btn"
+          title="Delete session"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDeleteSession(sessId, worktree.id);
+          }}
+        >
+          <Trash2 size={12} />
+        </button>
+      </div>
+    );
+  };
+
+  const renderArchivedSession = (session) => {
+    const sessId = session.sessionId || session.id;
+    const sessName = session.name || `Session ${sessId.slice(0, 8)}`;
+    return (
+      <div
+        key={sessId}
+        className="session-item archived"
+        onClick={(e) => {
+          e.stopPropagation();
+          onUnarchiveAndResume(sessId, worktree.id, worktree.branch_name, session.claude_session_id);
+        }}
+        title="Click to resume"
+      >
+        <span className="session-label">{sessName}</span>
         <button
           className="session-delete-btn"
           title="Delete session"
@@ -132,30 +176,39 @@ function BranchItem({
       {expanded && (
         <div className="branch-sessions">
           {activeSessions.map(renderActiveSession)}
+          {inactiveSessions.map(renderInactiveSession)}
 
-          {inactiveSessions.length > 0 && (
-            <div className="inactive-sessions-section">
-              <button
-                className="inactive-sessions-toggle"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setInactiveExpanded(!inactiveExpanded);
-                }}
-              >
-                <span className="inactive-sessions-chevron">
-                  {inactiveExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-                </span>
-                <span className="inactive-sessions-label">Inactive</span>
-                <span className="inactive-sessions-indicator" />
-                <span className="inactive-sessions-count">{inactiveSessions.length}</span>
-              </button>
-              {inactiveExpanded && (
-                <div className="inactive-sessions-list">
-                  {inactiveSessions.map(renderInactiveSession)}
-                </div>
+          {/* Archive section */}
+          <div className="archive-sessions-section">
+            <button
+              className="archive-sessions-toggle"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!archiveExpanded) {
+                  onLoadArchivedSessions(worktree.id);
+                }
+                setArchiveExpanded(!archiveExpanded);
+              }}
+            >
+              <span className="archive-sessions-chevron">
+                {archiveExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+              </span>
+              <Archive size={10} className="archive-icon" />
+              <span className="archive-sessions-label">Archive</span>
+              {archivedSessions.length > 0 && (
+                <span className="archive-sessions-count">{archivedSessions.length}</span>
               )}
-            </div>
-          )}
+            </button>
+            {archiveExpanded && (
+              <div className="archive-sessions-list">
+                {archivedSessions.length === 0 ? (
+                  <div className="archive-empty">No archived sessions</div>
+                ) : (
+                  archivedSessions.map(renderArchivedSession)
+                )}
+              </div>
+            )}
+          </div>
 
           <button
             className="new-session-btn"

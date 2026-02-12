@@ -51,6 +51,7 @@ class ClaudeProcess {
     this.historyMessages = [];
     this.replayTimer = null;
     this.mcpConfigPath = null;
+    this.hasStreamedContent = false; // true once content_block_* events arrive (skips assistant event re-processing)
   }
 
   start() {
@@ -79,6 +80,7 @@ class ClaudeProcess {
       '--print',
       '--input-format', 'stream-json',
       '--output-format', 'stream-json',
+      '--model', 'haiku',
       '--mcp-config', mcpConfigPath,
       '--permission-prompt-tool', 'mcp__bhunductor-permissions__request_permission',
       '--verbose'
@@ -88,6 +90,9 @@ class ClaudeProcess {
       args.push('--resume', this.options.resumeSessionId);
     } else if (this.options.continueSession) {
       args.push('--continue');
+    } else {
+      // New session: pass our UUID so claude_session_id is known from the start
+      args.push('--session-id', this.sessionId);
     }
 
     const claudeBin = getClaudePath();
@@ -187,10 +192,11 @@ class ClaudeProcess {
             if (texts.length > 0) {
               this.historyMessages.push({ role: 'assistant', type: 'text', text: texts.join('') });
             }
-          } else {
+          } else if (!this.hasStreamedContent) {
+            // Only process assistant event content if no streaming events were received
+            // (streaming events already forwarded text/tool_use/thinking in correct order)
             for (const block of contentArray) {
               if (block.type === 'tool_use') {
-                // Full tool_use from assistant event — forward with complete input
                 this.callbacks.onToolUse?.({
                   sessionId: this.sessionId,
                   toolUseId: block.id,
@@ -231,6 +237,8 @@ class ClaudeProcess {
           if (this.replayTimer) clearTimeout(this.replayTimer);
           this.replayTimer = setTimeout(() => this.finalizeReplay(), 500);
         } else {
+          // Commit streaming text first, then show cost badge
+          this.callbacks.onComplete({ sessionId: this.sessionId });
           this.callbacks.onTurnComplete?.({
             sessionId: this.sessionId,
             costUsd: event.total_cost_usd,
@@ -238,7 +246,6 @@ class ClaudeProcess {
             durationMs: event.duration_ms,
             numTurns: event.num_turns
           });
-          this.callbacks.onComplete({ sessionId: this.sessionId });
         }
         break;
 
@@ -252,9 +259,11 @@ class ClaudeProcess {
 
       case 'message_start':
         this.currentContentBlock = null;
+        this.hasStreamedContent = false;
         break;
 
       case 'content_block_start':
+        this.hasStreamedContent = true;
         if (event.content_block?.type === 'tool_use') {
           this.currentContentBlock = {
             type: 'tool_use',
@@ -440,3 +449,4 @@ class ClaudeProcess {
 }
 
 module.exports = ClaudeProcess;
+module.exports.getClaudePath = getClaudePath;

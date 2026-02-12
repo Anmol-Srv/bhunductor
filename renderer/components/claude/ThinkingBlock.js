@@ -2,19 +2,27 @@ import React, { useState } from 'react';
 import { Brain, ChevronRight, ChevronDown } from 'lucide-react';
 
 function ThinkingBlock({ thinking, isPartial }) {
-  const [collapsed, setCollapsed] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+
+  // Truncate thinking preview for the header
+  const preview = thinking
+    ? (thinking.length > 60 ? thinking.substring(0, 60) + '\u2026' : thinking)
+    : '';
 
   return (
-    <div className="thinking-block">
-      <div className="thinking-header" onClick={() => setCollapsed(!collapsed)}>
-        {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-        <Brain size={14} />
-        <span>
+    <div className="thinking-line">
+      <div className="thinking-line-header" onClick={() => setExpanded(!expanded)}>
+        {expanded ? <ChevronDown size={12} className="thinking-chevron" /> : <ChevronRight size={12} className="thinking-chevron" />}
+        <Brain size={12} className="thinking-icon" />
+        <span className="thinking-label">
           Thinking{isPartial ? <span className="thinking-dots">...</span> : ''}
         </span>
+        {!expanded && preview && (
+          <span className="thinking-preview">{preview}</span>
+        )}
       </div>
-      {!collapsed && (
-        <div className="thinking-body">
+      {expanded && (
+        <div className="thinking-line-body">
           {thinking}
         </div>
       )}

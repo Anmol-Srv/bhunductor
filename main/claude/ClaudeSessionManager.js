@@ -1,8 +1,10 @@
 const { v4: uuidv4 } = require('uuid');
+const { spawn } = require('child_process');
 const { getDatabase } = require('../data/database');
 const Worktree = require('../data/models/Worktree');
 const Folder = require('../data/models/Folder');
 const ClaudeProcess = require('./ClaudeProcess');
+const { getClaudePath } = require('./ClaudeProcess');
 const PermissionHttpServer = require('../mcp/PermissionHttpServer');
 
 class ClaudeSessionManager {
@@ -11,8 +13,9 @@ class ClaudeSessionManager {
     this.activeSessions = new Map(); // sessionId -> ClaudeProcess
     this.pendingPermissions = new Map(); // requestId -> { sessionId, resolve }
     this.historyBuffer = new Map(); // sessionId -> messages[]
+    this.sessionFirstMessage = new Map(); // sessionId -> first user message (for naming)
 
-    // Mark any leftover 'active' sessions from previous runs as exited
+    // Mark any leftover 'active' sessions from previous runs as stopped
     this.cleanupStaleSessions();
 
     // Start HTTP server for MCP permission requests
@@ -26,7 +29,7 @@ class ClaudeSessionManager {
 
   cleanupStaleSessions() {
     const db = getDatabase();
-    db.prepare("UPDATE claude_sessions SET status = 'exited' WHERE status = 'active'").run();
+    db.prepare("UPDATE claude_sessions SET status = 'stopped' WHERE status = 'active'").run();
   }
 
   /**
@@ -79,8 +82,9 @@ class ClaudeSessionManager {
   createSession(folderId, worktreeId, targetClaudeSessionId = null) {
     const sessionId = uuidv4();
     const db = getDatabase();
-    let deletedSessionIds = [];
+    let archivedSessionIds = [];
     let previousMessages = [];
+    let sessionName = 'New Session';
 
     // Get working directory - use worktree-specific path
     const folder = Folder.findById(folderId);
@@ -89,66 +93,49 @@ class ClaudeSessionManager {
       ? Worktree.getActivePath(worktree, folder)
       : folder.path;
 
-    // Determine resume/continue behavior
+    // Determine resume/continue behavior and compute claude_session_id upfront
     const options = {};
+    let claudeSessionId = sessionId; // Default: our UUID becomes Claude's session ID via --session-id
     if (targetClaudeSessionId) {
       // User clicked a specific past session — resume that exact conversation
       options.resumeSessionId = targetClaudeSessionId;
+      claudeSessionId = targetClaudeSessionId;
       console.log(`[ClaudeSessionManager] Resuming specific session: ${targetClaudeSessionId}`);
 
-      // Load messages from old session before deleting
-      const db = getDatabase();
+      // Load messages and name from old session
       const oldSession = db.prepare(`
-        SELECT messages FROM claude_sessions
+        SELECT messages, name FROM claude_sessions
         WHERE claude_session_id = ? AND status IN ('exited', 'stopped')
         ORDER BY created_at DESC LIMIT 1
       `).get(targetClaudeSessionId);
       if (oldSession?.messages) {
         try { previousMessages = JSON.parse(oldSession.messages); } catch (e) { }
       }
+      if (oldSession?.name && oldSession.name !== 'New Session') {
+        sessionName = oldSession.name;
+      }
 
-      // Delete old DB rows with matching claude_session_id to avoid duplicates
+      // Archive old DB rows (soft delete) instead of deleting
       const oldRows = db.prepare(`
         SELECT id FROM claude_sessions
-        WHERE claude_session_id = ? AND status IN ('exited', 'stopped')
+        WHERE claude_session_id = ? AND status IN ('exited', 'stopped') AND (archived = 0 OR archived IS NULL)
       `).all(targetClaudeSessionId);
-      deletedSessionIds = oldRows.map(r => r.id);
-      if (deletedSessionIds.length > 0) {
+      archivedSessionIds = oldRows.map(r => r.id);
+      if (archivedSessionIds.length > 0) {
         db.prepare(`
-          DELETE FROM claude_sessions
+          UPDATE claude_sessions SET archived = 1
           WHERE claude_session_id = ? AND status IN ('exited', 'stopped')
         `).run(targetClaudeSessionId);
-        console.log(`[ClaudeSessionManager] Deleted ${deletedSessionIds.length} old DB row(s) for resumed session`);
+        console.log(`[ClaudeSessionManager] Archived ${archivedSessionIds.length} old session(s) for resumed session`);
       }
     } else {
-      // "New Session" — continue the most recent conversation on this branch
-      const lastSession = this.getLastSessionForWorktree(folderId, worktreeId);
-      if (lastSession && lastSession.claude_session_id) {
-        options.continueSession = true;
-        // Load messages from the last session
-        if (lastSession.messages) {
-          try { previousMessages = JSON.parse(lastSession.messages); } catch (e) { }
-        }
-        console.log('[ClaudeSessionManager] Continuing previous session on branch');
-
-        // Delete old DB rows with the same claude_session_id to avoid duplicates on restart
-        const oldRows = db.prepare(`
-          SELECT id FROM claude_sessions
-          WHERE claude_session_id = ? AND status IN ('exited', 'stopped')
-        `).all(lastSession.claude_session_id);
-        deletedSessionIds = oldRows.map(r => r.id);
-        if (deletedSessionIds.length > 0) {
-          db.prepare(`
-            DELETE FROM claude_sessions
-            WHERE claude_session_id = ? AND status IN ('exited', 'stopped')
-          `).run(lastSession.claude_session_id);
-          console.log(`[ClaudeSessionManager] Deleted ${deletedSessionIds.length} old DB row(s) for continued session`);
-        }
-      }
+      // "New Session" — fresh session with our UUID via --session-id
+      console.log(`[ClaudeSessionManager] Starting fresh session: ${sessionId}`);
     }
 
     // Pre-load previous messages into buffer so ClaudeChat can pull them on mount
-    if (previousMessages.length > 0) {
+    const hasPreloadedMessages = previousMessages.length > 0;
+    if (hasPreloadedMessages) {
       console.log(`[ClaudeSessionManager] Pre-loading ${previousMessages.length} messages from previous session`);
       this.historyBuffer.set(sessionId, previousMessages);
     }
@@ -171,7 +158,11 @@ class ClaudeSessionManager {
         this.handleSystemInfo(sid, claudeSessionId);
       },
       onHistory: (data) => {
-        // Buffer history so it can be pulled by the renderer on mount
+        // If we pre-loaded messages from DB, skip CLI replay (DB format is richer)
+        if (hasPreloadedMessages) {
+          console.log(`[ClaudeSessionManager] Skipping CLI history replay — using pre-loaded DB messages`);
+          return;
+        }
         this.historyBuffer.set(sessionId, data.messages || []);
         this.mainWindow.webContents.send('claude:conversation-history', data);
       },
@@ -186,17 +177,37 @@ class ClaudeSessionManager {
       },
       onTurnComplete: (data) => {
         this.mainWindow.webContents.send('claude:turn-complete', data);
+
+        // Update last_active_at
+        const db = getDatabase();
+        db.prepare('UPDATE claude_sessions SET last_active_at = CURRENT_TIMESTAMP WHERE id = ?').run(sessionId);
+
+        // Generate title after first turn completes
+        const session = db.prepare('SELECT name FROM claude_sessions WHERE id = ?').get(sessionId);
+        if (session?.name === 'New Session' && this.sessionFirstMessage?.has(sessionId)) {
+          const firstMsg = this.sessionFirstMessage.get(sessionId);
+          this.generateSessionName(sessionId, firstMsg).catch(() => {});
+        }
       }
     }, options);
 
     claudeProcess.start();
     this.activeSessions.set(sessionId, claudeProcess);
 
-    // Save to database
+    // Save to database with claude_session_id known upfront, source='app'
     db.prepare(`
-      INSERT INTO claude_sessions (id, folder_id, worktree_id, status)
-      VALUES (?, ?, ?, 'active')
-    `).run(sessionId, folderId, worktreeId);
+      INSERT INTO claude_sessions (id, folder_id, worktree_id, status, name, claude_session_id, source, last_active_at)
+      VALUES (?, ?, ?, 'active', ?, ?, 'app', CURRENT_TIMESTAMP)
+    `).run(sessionId, folderId, worktreeId, sessionName, claudeSessionId);
+
+    // Auto-archive older stopped/exited sessions on this worktree
+    db.prepare(`
+      UPDATE claude_sessions SET archived = 1
+      WHERE folder_id = ? AND worktree_id = ?
+        AND id != ?
+        AND status IN ('stopped', 'exited')
+        AND (archived = 0 OR archived IS NULL)
+    `).run(folderId, worktreeId, sessionId);
 
     return {
       sessionId,
@@ -204,20 +215,25 @@ class ClaudeSessionManager {
       folder_id: folderId,
       worktree_id: worktreeId,
       status: 'active',
+      name: sessionName,
+      claude_session_id: claudeSessionId,
       workingDir,
-      deletedSessionIds
+      deletedSessionIds: archivedSessionIds
     };
   }
 
   /**
-   * Store Claude CLI's own session ID for resume support
+   * Verify/update Claude CLI's session ID (already set at INSERT time via --session-id)
    */
   handleSystemInfo(sessionId, claudeSessionId) {
-    console.log(`[ClaudeSessionManager] Captured Claude session ID: ${claudeSessionId} for session: ${sessionId}`);
     const db = getDatabase();
-    db.prepare(`
-      UPDATE claude_sessions SET claude_session_id = ? WHERE id = ?
-    `).run(claudeSessionId, sessionId);
+    const row = db.prepare('SELECT claude_session_id FROM claude_sessions WHERE id = ?').get(sessionId);
+    if (row?.claude_session_id !== claudeSessionId) {
+      console.log(`[ClaudeSessionManager] Claude session ID mismatch — updating: ${row?.claude_session_id} → ${claudeSessionId}`);
+      db.prepare('UPDATE claude_sessions SET claude_session_id = ? WHERE id = ?').run(claudeSessionId, sessionId);
+    } else {
+      console.log(`[ClaudeSessionManager] Claude session ID confirmed: ${claudeSessionId}`);
+    }
   }
 
   /**
@@ -237,7 +253,8 @@ class ClaudeSessionManager {
     return db.prepare(`
       SELECT * FROM claude_sessions
       WHERE folder_id = ? AND worktree_id = ? AND status IN ('stopped', 'exited')
-      ORDER BY created_at DESC
+        AND COALESCE(source, 'app') = 'app'
+      ORDER BY COALESCE(last_active_at, created_at) DESC
       LIMIT 1
     `).get(folderId, worktreeId);
   }
@@ -252,11 +269,111 @@ class ClaudeSessionManager {
     `).run(JSON.stringify(messages), sessionId);
   }
 
+  /**
+   * Generate a session name using Claude CLI
+   */
+  async generateSessionName(sessionId, userMessage) {
+    const claudeBin = getClaudePath();
+    const truncated = userMessage.substring(0, 500);
+    const prompt = `Generate a concise 3-5 word title for a coding session that starts with this message. Return ONLY the title, no quotes, no explanation:\n\n${truncated}`;
+
+    return new Promise((resolve) => {
+      const proc = spawn(claudeBin, ['-p', prompt, '--max-budget-usd', '0.01', '--no-session-persistence'], {
+        env: process.env,
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+
+      let output = '';
+      proc.stdout.on('data', (d) => { output += d.toString(); });
+      proc.on('close', () => {
+        const title = output.trim().replace(/^["']|["']$/g, '').substring(0, 60) || 'New Session';
+        if (title === 'New Session') { resolve(null); return; }
+
+        const db = getDatabase();
+        db.prepare('UPDATE claude_sessions SET name = ? WHERE id = ?').run(title, sessionId);
+
+        try {
+          if (!this.mainWindow.isDestroyed()) {
+            this.mainWindow.webContents.send('claude:session-name-update', { sessionId, name: title });
+          }
+        } catch {}
+        resolve(title);
+      });
+      proc.on('error', () => resolve(null));
+
+      setTimeout(() => { try { proc.kill(); } catch {} }, 15000);
+    });
+  }
+
+  /**
+   * Get the most recent session with messages for lazy resume display
+   */
+  getLastSessionWithMessages(folderId, worktreeId) {
+    const db = getDatabase();
+    return db.prepare(`
+      SELECT id, folder_id, worktree_id, status, name, claude_session_id, messages, last_active_at
+      FROM claude_sessions
+      WHERE folder_id = ? AND worktree_id = ?
+        AND status IN ('stopped', 'exited')
+        AND claude_session_id IS NOT NULL
+        AND messages IS NOT NULL
+        AND COALESCE(source, 'app') = 'app'
+        AND (archived = 0 OR archived IS NULL)
+      ORDER BY COALESCE(last_active_at, created_at) DESC
+      LIMIT 1
+    `).get(folderId, worktreeId);
+  }
+
+  /**
+   * Rename a session
+   */
+  renameSession(sessionId, name) {
+    const db = getDatabase();
+    db.prepare('UPDATE claude_sessions SET name = ? WHERE id = ?').run(name, sessionId);
+  }
+
+  /**
+   * Archive a session (soft delete)
+   */
+  archiveSession(sessionId) {
+    const db = getDatabase();
+    db.prepare('UPDATE claude_sessions SET archived = 1 WHERE id = ?').run(sessionId);
+  }
+
+  /**
+   * Unarchive a session
+   */
+  unarchiveSession(sessionId) {
+    const db = getDatabase();
+    db.prepare('UPDATE claude_sessions SET archived = 0 WHERE id = ?').run(sessionId);
+  }
+
+  /**
+   * List archived sessions for a worktree
+   */
+  listArchivedSessions(folderId, worktreeId) {
+    const db = getDatabase();
+    const sessions = db.prepare(`
+      SELECT * FROM claude_sessions
+      WHERE folder_id = ? AND worktree_id = ?
+        AND archived = 1
+        AND COALESCE(source, 'app') = 'app'
+      ORDER BY COALESCE(last_active_at, created_at) DESC
+    `).all(folderId, worktreeId);
+    return sessions.map(s => ({ ...s, sessionId: s.id }));
+  }
+
   sendMessage(sessionId, message) {
     const process = this.activeSessions.get(sessionId);
     if (!process) {
       throw new Error(`Session ${sessionId} not found`);
     }
+
+    // Track first user message for naming
+    if (!this.sessionFirstMessage.has(sessionId)) {
+      this.sessionFirstMessage.set(sessionId, message);
+    }
+
     process.sendMessage(message);
   }
 
@@ -328,18 +445,21 @@ class ClaudeSessionManager {
     if (worktreeId) {
       sessions = db.prepare(`
         SELECT * FROM claude_sessions
-        WHERE folder_id = ? AND worktree_id = ? AND COALESCE(source, 'app') = 'app'
-        ORDER BY created_at DESC
+        WHERE folder_id = ? AND worktree_id = ?
+          AND COALESCE(source, 'app') = 'app'
+          AND (archived = 0 OR archived IS NULL)
+        ORDER BY COALESCE(last_active_at, created_at) DESC
       `).all(folderId, worktreeId);
     } else {
       sessions = db.prepare(`
         SELECT * FROM claude_sessions
-        WHERE folder_id = ? AND COALESCE(source, 'app') = 'app'
-        ORDER BY created_at DESC
+        WHERE folder_id = ?
+          AND COALESCE(source, 'app') = 'app'
+          AND (archived = 0 OR archived IS NULL)
+        ORDER BY COALESCE(last_active_at, created_at) DESC
       `).all(folderId);
     }
 
-    // Map database 'id' field to 'sessionId' for consistency with created sessions
     return sessions.map(session => ({
       ...session,
       sessionId: session.id

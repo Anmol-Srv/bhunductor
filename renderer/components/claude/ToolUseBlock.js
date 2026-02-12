@@ -1,18 +1,17 @@
 import React, { useState } from 'react';
-import { Wrench, ChevronRight, ChevronDown, Loader, Check, X } from 'lucide-react';
+import { ChevronRight, ChevronDown, Loader, Check, X } from 'lucide-react';
 
 function formatToolInput(toolInput) {
   if (!toolInput) return null;
-  // Show primary value inline in header
   const keys = Object.keys(toolInput);
   if (keys.length === 0) return null;
-  // For common tools, show the most relevant field
   const primaryKey = keys.find(k => ['file_path', 'command', 'pattern', 'query', 'url', 'path', 'content'].includes(k)) || keys[0];
   const val = toolInput[primaryKey];
-  if (typeof val === 'string' && val.length > 60) {
-    return `${primaryKey}: ${val.substring(0, 60)}...`;
+  if (typeof val === 'string') {
+    const truncated = val.length > 80 ? val.substring(0, 80) + '\u2026' : val;
+    return truncated;
   }
-  return `${primaryKey}: ${typeof val === 'string' ? val : JSON.stringify(val)}`;
+  return JSON.stringify(val);
 }
 
 function formatResult(result) {
@@ -29,18 +28,18 @@ function formatResult(result) {
 }
 
 function ToolUseBlock({ toolName, toolInput, toolUseId, status, result, isError }) {
-  const [collapsed, setCollapsed] = useState(true);
+  const [expanded, setExpanded] = useState(false);
 
   const statusIcon = () => {
     switch (status) {
       case 'running':
-        return <Loader size={14} className="spinner tool-use-status running" />;
+        return <Loader size={12} className="spinner tool-status-icon running" />;
       case 'complete':
-        return <Check size={14} className="tool-use-status complete" />;
+        return <Check size={12} className="tool-status-icon complete" />;
       case 'error':
-        return <X size={14} className="tool-use-status error" />;
+        return <X size={12} className="tool-status-icon error" />;
       default:
-        return <Loader size={14} className="spinner tool-use-status running" />;
+        return <Loader size={12} className="spinner tool-status-icon running" />;
     }
   };
 
@@ -48,27 +47,20 @@ function ToolUseBlock({ toolName, toolInput, toolUseId, status, result, isError 
   const resultText = formatResult(result);
 
   return (
-    <div className={`tool-use-block ${isError ? 'error' : ''}`}>
-      <div className="tool-use-header" onClick={() => setCollapsed(!collapsed)}>
-        {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-        <Wrench size={14} />
-        <span className="tool-use-name">{toolName}</span>
-        {primaryValue && <span className="tool-use-primary">{primaryValue}</span>}
+    <div className="tool-line">
+      <div className="tool-line-header" onClick={() => setExpanded(!expanded)}>
+        {expanded ? <ChevronDown size={12} className="tool-chevron" /> : <ChevronRight size={12} className="tool-chevron" />}
         {statusIcon()}
+        <span className="tool-line-name">{toolName}</span>
+        {primaryValue && <span className="tool-line-preview">{primaryValue}</span>}
       </div>
-      {!collapsed && (
-        <div className="tool-use-body">
+      {expanded && (
+        <div className="tool-line-body">
           {toolInput && (
-            <div className="tool-use-section">
-              <div className="tool-use-section-label">Input</div>
-              <pre className="tool-use-code">{JSON.stringify(toolInput, null, 2)}</pre>
-            </div>
+            <pre className="tool-line-code">{JSON.stringify(toolInput, null, 2)}</pre>
           )}
           {resultText && (
-            <div className="tool-use-section">
-              <div className="tool-use-section-label">{isError ? 'Error' : 'Result'}</div>
-              <pre className={`tool-use-code ${isError ? 'error-text' : ''}`}>{resultText}</pre>
-            </div>
+            <pre className={`tool-line-code ${isError ? 'error-text' : ''}`}>{resultText}</pre>
           )}
         </div>
       )}

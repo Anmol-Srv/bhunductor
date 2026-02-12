@@ -260,6 +260,69 @@ function registerIPCHandlers(configManager, mainWindow) {
     }
   });
 
+  // Session management: get last session for lazy resume
+  ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_GET_LAST, async (event, folderId, worktreeId) => {
+    try {
+      const session = claudeManager.getLastSessionWithMessages(folderId, worktreeId);
+      if (session) {
+        let parsedMessages = [];
+        if (session.messages) {
+          try { parsedMessages = JSON.parse(session.messages); } catch {}
+        }
+        return { success: true, session: { ...session, sessionId: session.id, parsedMessages } };
+      }
+      return { success: true, session: null };
+    } catch (error) {
+      console.error('[IPC] Error getting last session:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Session management: lazy resume (create + send first message)
+  ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_LAZY_RESUME, async (event, folderId, worktreeId, claudeSessionId, message) => {
+    try {
+      const { deletedSessionIds, ...session } = claudeManager.createSession(folderId, worktreeId, claudeSessionId);
+      claudeManager.sendMessage(session.sessionId, message);
+      return { success: true, session, archivedSessionIds: deletedSessionIds };
+    } catch (error) {
+      console.error('[IPC] Error in lazy resume:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Session management: archive
+  ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_ARCHIVE, async (event, sessionId) => {
+    try {
+      claudeManager.archiveSession(sessionId);
+      return { success: true };
+    } catch (error) {
+      console.error('[IPC] Error archiving session:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Session management: unarchive
+  ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_UNARCHIVE, async (event, sessionId) => {
+    try {
+      claudeManager.unarchiveSession(sessionId);
+      return { success: true };
+    } catch (error) {
+      console.error('[IPC] Error unarchiving session:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Session management: list archived sessions
+  ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_LIST_ARCHIVED, async (event, folderId, worktreeId) => {
+    try {
+      const sessions = claudeManager.listArchivedSessions(folderId, worktreeId);
+      return { success: true, sessions };
+    } catch (error) {
+      console.error('[IPC] Error listing archived sessions:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   console.log('[IPC] Handlers registered');
 }
 
