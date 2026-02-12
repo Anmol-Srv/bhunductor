@@ -77,28 +77,24 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
     return () => unsubscribe();
   }, []);
 
-  // Listen for session name updates from Claude
+  // Listen for session title updates from Claude
   useEffect(() => {
-    const unsub = window.electron.on('claude:session-name-update', (data) => {
-      const { sessionId, name } = data;
+    const unsub = window.electron.on('claude:session-title-updated', (data) => {
+      const { sessionId, title } = data;
       // Update in sessionsByWorktree
       setSessionsByWorktree(prev => {
         const next = { ...prev };
         for (const wtId of Object.keys(next)) {
           next[wtId] = next[wtId].map(s =>
-            (s.sessionId || s.id) === sessionId ? { ...s, name } : s
+            (s.sessionId || s.id) === sessionId ? { ...s, name: title, title } : s
           );
         }
         return next;
       });
       // Update in openTabs
       setOpenTabs(prev => prev.map(t =>
-        t.sessionId === sessionId ? { ...t, name } : t
+        t.sessionId === sessionId ? { ...t, name: title, title } : t
       ));
-      // Update pendingResumeSession if it matches
-      setPendingResumeSession(prev =>
-        prev && prev.sessionId === sessionId ? { ...prev, name } : prev
-      );
     });
     return () => unsub();
   }, []);
@@ -132,7 +128,7 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
                 claudeSessionId: last.claude_session_id,
                 worktreeId: active.id,
                 branchName: active.branch_name,
-                name: last.name || 'New Session',
+                title: last.name || null,
                 messages: last.parsedMessages || []
               });
             }
@@ -261,7 +257,7 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
         sessionId: session.sessionId,
         worktreeId,
         branchName: targetWorktree.branch_name,
-        name: session.name || 'New Session'
+        title: session.title || session.name || null
       };
       setOpenTabs(prev => [...prev, newTab]);
       setActiveTabId(session.sessionId);
@@ -367,7 +363,7 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
           sessionId: session.sessionId,
           worktreeId,
           branchName,
-          name: name || session.name || 'New Session'
+          title: name || session.title || session.name || null
         };
         setOpenTabs(prev => [...prev, newTab]);
         setActiveTabId(session.sessionId);

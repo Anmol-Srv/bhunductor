@@ -1,10 +1,8 @@
 const { v4: uuidv4 } = require('uuid');
-const { spawn } = require('child_process');
 const { getDatabase } = require('../data/database');
 const Worktree = require('../data/models/Worktree');
 const Folder = require('../data/models/Folder');
 const ClaudeProcess = require('./ClaudeProcess');
-const { getClaudePath } = require('./ClaudeProcess');
 const PermissionHttpServer = require('../mcp/PermissionHttpServer');
 
 class ClaudeSessionManager {
@@ -13,7 +11,6 @@ class ClaudeSessionManager {
     this.activeSessions = new Map(); // sessionId -> ClaudeProcess
     this.pendingPermissions = new Map(); // requestId -> { sessionId, resolve }
     this.historyBuffer = new Map(); // sessionId -> messages[]
-    this.sessionFirstMessage = new Map(); // sessionId -> first user message (for naming)
 
     // Mark any leftover 'active' sessions from previous runs as stopped
     this.cleanupStaleSessions();
@@ -84,7 +81,7 @@ class ClaudeSessionManager {
     const db = getDatabase();
     let archivedSessionIds = [];
     let previousMessages = [];
-    let sessionName = 'New Session';
+    let sessionName = null;
 
     // Get working directory - use worktree-specific path
     const folder = Folder.findById(folderId);
@@ -111,7 +108,7 @@ class ClaudeSessionManager {
       if (oldSession?.messages) {
         try { previousMessages = JSON.parse(oldSession.messages); } catch (e) { }
       }
-      if (oldSession?.name && oldSession.name !== 'New Session') {
+      if (oldSession?.name) {
         sessionName = oldSession.name;
       }
 
@@ -181,13 +178,6 @@ class ClaudeSessionManager {
         // Update last_active_at
         const db = getDatabase();
         db.prepare('UPDATE claude_sessions SET last_active_at = CURRENT_TIMESTAMP WHERE id = ?').run(sessionId);
-
-        // Generate title after first turn completes
-        const session = db.prepare('SELECT name FROM claude_sessions WHERE id = ?').get(sessionId);
-        if (session?.name === 'New Session' && this.sessionFirstMessage?.has(sessionId)) {
-          const firstMsg = this.sessionFirstMessage.get(sessionId);
-          this.generateSessionName(sessionId, firstMsg).catch(() => {});
-        }
       }
     }, options);
 
@@ -216,6 +206,7 @@ class ClaudeSessionManager {
       worktree_id: worktreeId,
       status: 'active',
       name: sessionName,
+      title: sessionName,
       claude_session_id: claudeSessionId,
       workingDir,
       deletedSessionIds: archivedSessionIds
@@ -270,39 +261,23 @@ class ClaudeSessionManager {
   }
 
   /**
-   * Generate a session name using Claude CLI
+   * Set session title from first user message (first 80 chars)
    */
-  async generateSessionName(sessionId, userMessage) {
-    const claudeBin = getClaudePath();
-    const truncated = userMessage.substring(0, 500);
-    const prompt = `Generate a concise 3-5 word title for a coding session that starts with this message. Return ONLY the title, no quotes, no explanation:\n\n${truncated}`;
+  setTitleIfEmpty(sessionId, messageText) {
+    const db = getDatabase();
+    const session = db.prepare('SELECT name FROM claude_sessions WHERE id = ?').get(sessionId);
+    if (session?.name && session.name !== 'New Session') return; // Already has a title
 
-    return new Promise((resolve) => {
-      const proc = spawn(claudeBin, ['-p', prompt, '--max-budget-usd', '0.01', '--no-session-persistence'], {
-        env: process.env,
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
+    const title = messageText.replace(/\n/g, ' ').trim().substring(0, 80) || 'New Session';
+    if (title === 'New Session') return;
 
-      let output = '';
-      proc.stdout.on('data', (d) => { output += d.toString(); });
-      proc.on('close', () => {
-        const title = output.trim().replace(/^["']|["']$/g, '').substring(0, 60) || 'New Session';
-        if (title === 'New Session') { resolve(null); return; }
+    db.prepare('UPDATE claude_sessions SET name = ? WHERE id = ?').run(title, sessionId);
 
-        const db = getDatabase();
-        db.prepare('UPDATE claude_sessions SET name = ? WHERE id = ?').run(title, sessionId);
-
-        try {
-          if (!this.mainWindow.isDestroyed()) {
-            this.mainWindow.webContents.send('claude:session-name-update', { sessionId, name: title });
-          }
-        } catch {}
-        resolve(title);
-      });
-      proc.on('error', () => resolve(null));
-
-      setTimeout(() => { try { proc.kill(); } catch {} }, 15000);
-    });
+    try {
+      if (!this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send('claude:session-title-updated', { sessionId, title });
+      }
+    } catch {}
   }
 
   /**
@@ -369,10 +344,8 @@ class ClaudeSessionManager {
       throw new Error(`Session ${sessionId} not found`);
     }
 
-    // Track first user message for naming
-    if (!this.sessionFirstMessage.has(sessionId)) {
-      this.sessionFirstMessage.set(sessionId, message);
-    }
+    // Set title from first message if not already set
+    this.setTitleIfEmpty(sessionId, message);
 
     process.sendMessage(message);
   }

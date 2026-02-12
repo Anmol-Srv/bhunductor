@@ -35,7 +35,7 @@ const ALLOWED_CHANNELS = [
   'claude:tool-result',
   'claude:thinking',
   'claude:turn-complete',
-  'claude:session-name-update',
+  'claude:session-title-updated',
   'claude:session-archive',
   'claude:session-unarchive',
   'claude:session-list-archived',

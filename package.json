@@ -6,7 +6,7 @@
   "scripts": {
     "postinstall": "electron-rebuild",
     "start": "npm run build && electron .",
-    "dev": "concurrently -k \"webpack --mode development --watch\" \"sleep 2 && NODE_ENV=development electronmon .\"",
+    "devi": "concurrently -k \"webpack --mode development --watch\" \"sleep 2 && NODE_ENV=development electronmon .\"",
     "build": "webpack --mode production",
     "watch": "webpack --mode development --watch",
     "pack": "electron-builder --dir",

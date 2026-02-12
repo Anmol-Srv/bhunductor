@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Send, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { Send, AlertCircle, Copy, Check, Paperclip, ChevronDown, Lightbulb } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import ToolUseBlock from './ToolUseBlock';
 import ToolCallGroup from './ToolCallGroup';
@@ -243,6 +243,39 @@ function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onL
     }
   };
 
+  const [copiedId, setCopiedId] = useState(null);
+  const [selectedModel, setSelectedModel] = useState('sonnet');
+  const [thinkingEnabled, setThinkingEnabled] = useState(false);
+  const [showModelMenu, setShowModelMenu] = useState(false);
+  const modelMenuRef = useRef(null);
+
+  const models = [
+    { id: 'sonnet', label: 'Sonnet 4.5' },
+    { id: 'opus', label: 'Opus 4.6' },
+    { id: 'haiku', label: 'Haiku 4.5' },
+  ];
+
+  const selectedModelLabel = models.find(m => m.id === selectedModel)?.label || 'Sonnet 4.5';
+
+  // Close model menu on outside click
+  useEffect(() => {
+    if (!showModelMenu) return;
+    const handleClick = (e) => {
+      if (modelMenuRef.current && !modelMenuRef.current.contains(e.target)) {
+        setShowModelMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showModelMenu]);
+
+  const handleCopy = useCallback((text, msgId) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedId(msgId);
+      setTimeout(() => setCopiedId(null), 2000);
+    });
+  }, []);
+
   const activePermission = permissionQueue[0] || null;
 
   const handlePermissionResponse = async (approved) => {
@@ -257,7 +290,7 @@ function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onL
     }
   };
 
-  const renderMessage = (msg, idx) => {
+  const renderMessage = (msg, idx, nextMsg, prevMsg) => {
     switch (msg.type) {
       case 'text':
         if (msg.role === 'user') {
@@ -267,9 +300,33 @@ function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onL
             </div>
           );
         }
+        // Check if next message is a 'result' (turn cost) — render it inline as footer
+        const hasCostFooter = nextMsg && nextMsg.type === 'result';
         return (
-          <div key={msg.id || idx} className="chat-assistant-msg">
-            <MarkdownRenderer content={msg.text} />
+          <div key={msg.id || idx} className="chat-assistant-block">
+            <div className="chat-assistant-msg">
+              <MarkdownRenderer content={msg.text} />
+            </div>
+            <div className="chat-response-footer">
+              <div className="chat-response-meta">
+                {hasCostFooter && (
+                  <TurnCostBadge
+                    costUsd={nextMsg.costUsd}
+                    usage={nextMsg.usage}
+                    durationMs={nextMsg.durationMs}
+                  />
+                )}
+              </div>
+              <button
+                className="copy-response-btn"
+                onClick={() => handleCopy(msg.text, msg.id)}
+                title="Copy response"
+              >
+                {copiedId === msg.id
+                  ? <Check size={13} />
+                  : <Copy size={13} />}
+              </button>
+            </div>
           </div>
         );
 
@@ -307,13 +364,15 @@ function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onL
         );
 
       case 'result':
+        // Skip if preceding assistant text already rendered this inline
+        if (prevMsg?.type === 'text' && prevMsg?.role === 'assistant') return null;
+        // Standalone fallback (e.g. after tool groups with no trailing text)
         return (
-          <TurnCostBadge
-            key={msg.id || idx}
-            costUsd={msg.costUsd}
-            usage={msg.usage}
-            durationMs={msg.durationMs}
-          />
+          <div key={msg.id || idx} className="chat-response-footer" style={{ opacity: 1 }}>
+            <div className="chat-response-meta">
+              <TurnCostBadge costUsd={msg.costUsd} usage={msg.usage} durationMs={msg.durationMs} />
+            </div>
+          </div>
         );
 
       default:
@@ -370,7 +429,12 @@ function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onL
           if (item.type === 'tool_group') {
             return <ToolCallGroup key={`tg-${idx}`} tools={item.tools} />;
           }
-          return renderMessage(item.msg, idx);
+          // Look ahead/behind for context
+          const nextItem = renderItems[idx + 1];
+          const prevItem = renderItems[idx - 1];
+          const nextMsg = nextItem?.type === 'single' ? nextItem.msg : null;
+          const prevMsg = prevItem?.type === 'single' ? prevItem.msg : null;
+          return renderMessage(item.msg, idx, nextMsg, prevMsg);
         })}
 
         {isStreaming && streamingMessage && (
@@ -396,26 +460,68 @@ function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onL
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="chat-input-bar">
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSendMessage();
-            }
-          }}
-          placeholder={placeholderText || "Ask to make changes, @mention files, run /commands"}
-          disabled={isStreaming && !isReadOnly}
-        />
-        <button
-          className="chat-send-btn"
-          onClick={handleSendMessage}
-          disabled={!input.trim() || isStreaming}
-        >
-          <Send size={16} />
-        </button>
+      <div className="chat-input-area">
+        <div className="chat-input-box">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+              }
+            }}
+            placeholder={placeholderText || "Ask to make changes, @mention files, run /commands"}
+            disabled={isStreaming && !isReadOnly}
+            rows={1}
+          />
+          <div className="chat-input-toolbar">
+            <div className="chat-input-toolbar-left">
+              <div className="model-selector" ref={modelMenuRef}>
+                <button
+                  className="model-selector-btn"
+                  onClick={() => setShowModelMenu(!showModelMenu)}
+                >
+                  <span>{selectedModelLabel}</span>
+                  <ChevronDown size={12} />
+                </button>
+                {showModelMenu && (
+                  <div className="model-selector-menu">
+                    {models.map(m => (
+                      <div
+                        key={m.id}
+                        className={`model-selector-item ${m.id === selectedModel ? 'active' : ''}`}
+                        onClick={() => { setSelectedModel(m.id); setShowModelMenu(false); }}
+                      >
+                        {m.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button
+                className={`input-icon-btn ${thinkingEnabled ? 'active' : ''}`}
+                onClick={() => setThinkingEnabled(!thinkingEnabled)}
+                title={thinkingEnabled ? 'Thinking enabled' : 'Enable thinking'}
+              >
+                <Lightbulb size={14} />
+              </button>
+              <button
+                className="input-icon-btn"
+                title="Attach file"
+              >
+                <Paperclip size={14} />
+              </button>
+            </div>
+            <button
+              className="chat-send-btn"
+              onClick={handleSendMessage}
+              disabled={!input.trim() || isStreaming}
+            >
+              <Send size={14} />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

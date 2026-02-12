@@ -42,7 +42,7 @@ function BranchItem({
 
   const renderActiveSession = (session) => {
     const sessId = session.sessionId || session.id;
-    const sessName = session.name || `Session ${sessId.slice(0, 8)}`;
+    const sessName = session.title || session.name || `Session ${sessId.slice(0, 8)}`;
     const isOpen = isSessionOpen(sessId);
     return (
       <div
@@ -62,7 +62,7 @@ function BranchItem({
 
   const renderInactiveSession = (session) => {
     const sessId = session.sessionId || session.id;
-    const sessName = session.name || `Session ${sessId.slice(0, 8)}`;
+    const sessName = session.title || session.name || `Session ${sessId.slice(0, 8)}`;
     return (
       <div
         key={sessId}
@@ -100,7 +100,7 @@ function BranchItem({
 
   const renderArchivedSession = (session) => {
     const sessId = session.sessionId || session.id;
-    const sessName = session.name || `Session ${sessId.slice(0, 8)}`;
+    const sessName = session.title || session.name || `Session ${sessId.slice(0, 8)}`;
     return (
       <div
         key={sessId}

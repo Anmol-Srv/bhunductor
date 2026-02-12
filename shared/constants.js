@@ -36,7 +36,7 @@ const IPC_CHANNELS = {
   CLAUDE_TOOL_RESULT: 'claude:tool-result',
   CLAUDE_THINKING: 'claude:thinking',
   CLAUDE_TURN_COMPLETE: 'claude:turn-complete',
-  CLAUDE_SESSION_NAME_UPDATE: 'claude:session-name-update',
+  CLAUDE_SESSION_TITLE_UPDATED: 'claude:session-title-updated',
   CLAUDE_SESSION_ARCHIVE: 'claude:session-archive',
   CLAUDE_SESSION_UNARCHIVE: 'claude:session-unarchive',
   CLAUDE_SESSION_LIST_ARCHIVED: 'claude:session-list-archived',

@@ -13,7 +13,7 @@ function MainContent({ openTabs, activeTabId, onSwitchTab, onCloseTab, pendingRe
           <div className="tab-bar">
             <div className="tab-item active">
               <span className="tab-label">
-                {pendingResumeSession.branchName} / {pendingResumeSession.name || 'Previous Session'}
+                {pendingResumeSession.title || `${pendingResumeSession.branchName} / Previous Session`}
               </span>
             </div>
           </div>
@@ -67,7 +67,7 @@ function MainContent({ openTabs, activeTabId, onSwitchTab, onCloseTab, pendingRe
             onClick={() => onSwitchTab(tab.sessionId)}
           >
             <span className="tab-label">
-              {tab.branchName} / {tab.name || tab.sessionId.slice(0, 8)}
+              {tab.title || `${tab.branchName} / ${tab.sessionId.slice(0, 8)}`}
             </span>
             <button
               className="tab-close"
