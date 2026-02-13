@@ -6,6 +6,7 @@ import RightPanel from '../components/RightPanel';
 import CreateBranchModal from '../components/CreateBranchModal';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
 import ClaudeChat from '../components/claude/ClaudeChat';
+import FileViewer from '../components/FileViewer';
 
 function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoForward }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -420,7 +421,79 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
     }
   }, [folder]);
 
-  const handleCloseTab = useCallback((sessionId, shouldStop) => {
+  const handleFileOpen = useCallback((fileData) => {
+    if (!activeWorktree) return;
+
+    const fileId = `file-${activeWorktree.id}-${fileData.relativePath}`;
+
+    // Check if already open
+    const existing = openTabs.find(t => t.fileId === fileId);
+    if (existing) {
+      setActiveTabId(fileId);
+      return;
+    }
+
+    // Create new file tab
+    const newTab = {
+      type: 'file',
+      fileId,
+      worktreeId: activeWorktree.id,
+      filePath: fileData.filePath,
+      relativePath: fileData.relativePath,
+      fileName: fileData.fileName,
+      hasChanges: fileData.hasChanges,
+      changeType: fileData.changeType
+    };
+
+    setOpenTabs(prev => [...prev, newTab]);
+    setActiveTabId(fileId);
+  }, [activeWorktree, openTabs]);
+
+  const handleCloseTab = useCallback((tabId, shouldStop) => {
+    // Find the tab
+    const tab = openTabs.find(t => {
+      const tId = t.type === 'file' ? t.fileId : t.sessionId;
+      return tId === tabId;
+    });
+
+    if (!tab) return;
+
+    // Handle file tabs
+    if (tab.type === 'file') {
+      // Clear file cache
+      FileViewer.clearCache(tabId);
+
+      // Remove tab
+      setOpenTabs(prev => {
+        const filtered = prev.filter(t => {
+          const tId = t.type === 'file' ? t.fileId : t.sessionId;
+          return tId !== tabId;
+        });
+
+        // Update active tab if needed
+        setActiveTabId(currentActive => {
+          if (currentActive === tabId) {
+            const oldIdx = prev.findIndex(t => {
+              const tId = t.type === 'file' ? t.fileId : t.sessionId;
+              return tId === tabId;
+            });
+            const newTab = filtered[Math.min(oldIdx, filtered.length - 1)];
+            if (newTab) {
+              return newTab.type === 'file' ? newTab.fileId : newTab.sessionId;
+            }
+            return null;
+          }
+          return currentActive;
+        });
+
+        return filtered;
+      });
+      return;
+    }
+
+    // Handle Claude session tabs (existing logic)
+    const sessionId = tabId;
+
     // Persist messages to DB before closing
     const cachedMessages = ClaudeChat.getCache(sessionId);
     if (cachedMessages.length > 0) {
@@ -454,13 +527,16 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
         if (currentActive === sessionId) {
           const oldIdx = prev.findIndex(t => t.sessionId === sessionId);
           const newTab = filtered[Math.min(oldIdx, filtered.length - 1)];
-          return newTab?.sessionId || null;
+          if (newTab) {
+            return newTab.type === 'file' ? newTab.fileId : newTab.sessionId;
+          }
+          return null;
         }
         return currentActive;
       });
       return filtered;
     });
-  }, []);
+  }, [openTabs]);
 
   return (
     <div className="dashboard">
@@ -503,7 +579,10 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
           onLazyResume={handleLazyResume}
         />
 
-        <RightPanel />
+        <RightPanel
+          activeWorktree={activeWorktree}
+          onFileOpen={handleFileOpen}
+        />
       </div>
 
       <CreateBranchModal

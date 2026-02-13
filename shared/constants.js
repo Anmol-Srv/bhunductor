@@ -18,6 +18,11 @@ const IPC_CHANNELS = {
   WORKTREE_SET_ACTIVE: 'worktree:set-active',
   WORKTREE_CLEANUP: 'worktree:cleanup',
 
+  FILE_TREE_GET: 'file:tree-get',
+  FILE_READ_CONTENT: 'file:read-content',
+  FILE_GET_GIT_DIFF: 'file:get-git-diff',
+  FILE_GET_GIT_STATUS: 'file:get-git-status',
+
   CLAUDE_SESSION_START: 'claude:session-start',
   CLAUDE_SESSION_STOP: 'claude:session-stop',
   CLAUDE_SESSION_DELETE: 'claude:session-delete',

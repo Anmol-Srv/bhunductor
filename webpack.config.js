@@ -1,4 +1,5 @@
 const path = require('path');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 module.exports = {
   mode: process.env.NODE_ENV === 'development' ? 'development' : 'production',
@@ -29,5 +30,15 @@ module.exports = {
   resolve: {
     extensions: ['.js', '.jsx']
   },
+  plugins: [
+    new CopyWebpackPlugin({
+      patterns: [
+        {
+          from: 'node_modules/monaco-editor/min/vs',
+          to: 'vs'
+        }
+      ]
+    })
+  ],
   devtool: process.env.NODE_ENV === 'development' ? 'source-map' : false
 };

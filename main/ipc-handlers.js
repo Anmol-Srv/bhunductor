@@ -2,6 +2,7 @@ const { ipcMain, dialog, app } = require('electron');
 const { IPC_CHANNELS } = require('../shared/constants');
 const Folder = require('./data/models/Folder');
 const Worktree = require('./data/models/Worktree');
+const File = require('./data/models/File');
 const ClaudeSessionManager = require('./claude/ClaudeSessionManager');
 
 function registerIPCHandlers(configManager, mainWindow) {
@@ -175,6 +176,87 @@ function registerIPCHandlers(configManager, mainWindow) {
       return { success: true, result };
     } catch (error) {
       console.error('[IPC] Error cleaning up worktrees:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // File handlers
+  ipcMain.handle(IPC_CHANNELS.FILE_TREE_GET, async (event, worktreeId) => {
+    try {
+      console.log('[IPC] FILE_TREE_GET called with worktreeId:', worktreeId);
+      const worktree = Worktree.findById(worktreeId);
+      console.log('[IPC] Found worktree:', worktree ? 'yes' : 'no');
+      if (!worktree) {
+        return { success: false, error: 'Worktree not found' };
+      }
+
+      const worktreePath = worktree.is_main === 1
+        ? worktree.folder.path
+        : worktree.worktree_path;
+      console.log('[IPC] Worktree path:', worktreePath);
+
+      const treeResult = File.getFileTree(worktreePath);
+      console.log('[IPC] File tree result:', treeResult.success ? `success (${treeResult.tree?.length || 0} items)` : 'error', treeResult.error || '');
+      if (!treeResult.success) {
+        return treeResult;
+      }
+
+      const statusResult = File.getGitStatus(worktreePath);
+      const gitStatus = statusResult.success ? statusResult.files : [];
+
+      return { success: true, tree: treeResult.tree, gitStatus };
+    } catch (error) {
+      console.error('[IPC] Error getting file tree:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.FILE_READ_CONTENT, async (event, filePath) => {
+    try {
+      console.log('[IPC] FILE_READ_CONTENT called with filePath:', filePath);
+      const result = File.readContent(filePath);
+      console.log('[IPC] Read content result:', result.success ? 'success' : 'error', result.error || '');
+      return result;
+    } catch (error) {
+      console.error('[IPC] Error reading file content:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.FILE_GET_GIT_DIFF, async (event, worktreeId, relativePath) => {
+    try {
+      const worktree = Worktree.findById(worktreeId);
+      if (!worktree) {
+        return { success: false, error: 'Worktree not found' };
+      }
+
+      const worktreePath = worktree.is_main === 1
+        ? worktree.folder.path
+        : worktree.worktree_path;
+
+      const result = File.getGitDiff(worktreePath, relativePath);
+      return result;
+    } catch (error) {
+      console.error('[IPC] Error getting git diff:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.FILE_GET_GIT_STATUS, async (event, worktreeId) => {
+    try {
+      const worktree = Worktree.findById(worktreeId);
+      if (!worktree) {
+        return { success: false, error: 'Worktree not found' };
+      }
+
+      const worktreePath = worktree.is_main === 1
+        ? worktree.folder.path
+        : worktree.worktree_path;
+
+      const result = File.getGitStatus(worktreePath);
+      return result;
+    } catch (error) {
+      console.error('[IPC] Error getting git status:', error);
       return { success: false, error: error.message };
     }
   });

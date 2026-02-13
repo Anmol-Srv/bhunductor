@@ -1837,3 +1837,338 @@ body {
 .hljs-deletion { color: #ffa198; background: rgba(255, 129, 130, 0.1); }
 .hljs-section { color: #79c0ff; font-weight: bold; }
 .hljs-meta { color: #d2a8ff; }
+
+/* ========================================
+   File Explorer & Viewer Styles
+   ======================================== */
+
+/* File Tree Explorer */
+.file-tree-explorer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.file-tree-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.file-tree-header .header-title {
+  flex: 1;
+}
+
+.file-tree-header .refresh-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.file-tree-header .refresh-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.file-tree-header .refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.file-tree-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.file-tree-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.file-tree-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.file-tree-content::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 3px;
+}
+
+.file-tree-content::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+.file-tree-content .loading,
+.file-tree-content .error,
+.file-tree-content .empty {
+  padding: 20px 12px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.file-tree-content .error p {
+  margin-bottom: 12px;
+  color: var(--error-color);
+}
+
+.file-tree-content .error .retry-btn {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
+.file-tree-content .error .retry-btn:hover {
+  background: var(--bg-hover);
+}
+
+.file-tree-item {
+  user-select: none;
+}
+
+.file-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.file-tree-row:hover {
+  background: var(--bg-hover);
+}
+
+.file-tree-row .chevron {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.file-tree-row .icon {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.file-tree-row .name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+}
+
+.file-tree-row.has-changes .name {
+  color: var(--warning-color);
+  font-weight: 500;
+}
+
+.git-status-badge {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.git-status-badge.status-m {
+  background: rgba(255, 199, 0, 0.15);
+  color: #ffc700;
+}
+
+.git-status-badge.status-a {
+  background: rgba(46, 160, 67, 0.15);
+  color: #2ea043;
+}
+
+.git-status-badge.status-d {
+  background: rgba(248, 81, 73, 0.15);
+  color: #f85149;
+}
+
+.git-status-badge.status-\? {
+  background: rgba(139, 148, 158, 0.15);
+  color: #8b949e;
+}
+
+/* File Viewer */
+.file-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-primary);
+}
+
+.file-viewer-loading,
+.file-viewer-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.file-viewer-error p {
+  color: var(--error-color);
+}
+
+.file-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.file-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.file-path {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.change-type-badge {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.change-type-badge.M {
+  background: rgba(255, 199, 0, 0.15);
+  color: #ffc700;
+}
+
+.change-type-badge.A {
+  background: rgba(46, 160, 67, 0.15);
+  color: #2ea043;
+}
+
+.change-type-badge.D {
+  background: rgba(248, 81, 73, 0.15);
+  color: #f85149;
+}
+
+.view-controls {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.view-controls button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.view-controls button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.view-controls button.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.file-viewer-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.diff-container {
+  height: 100%;
+  overflow: auto;
+}
+
+/* Tab styling for file tabs */
+.tab-item.file {
+  color: var(--text-secondary);
+}
+
+.tab-item.file.active {
+  color: var(--primary-color);
+  background: var(--bg-secondary);
+}
+
+.tab-item .tab-icon {
+  margin-right: 4px;
+}
+
+.modified-indicator {
+  color: var(--warning-color);
+  font-size: 16px;
+  line-height: 1;
+  margin-left: 4px;
+}
+
+/* Spinner animation for refresh button */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
