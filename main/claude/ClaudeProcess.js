@@ -110,7 +110,13 @@ class ClaudeProcess {
     fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
     this.mcpConfigPath = mcpConfigPath;
 
-    const systemPrompt = `After receiving the first user message, use the rename_session tool to give this conversation a concise, descriptive title that summarizes the main topic or purpose (max 80 characters). This helps with session organization and navigation.`;
+    const systemPrompt = `IMPORTANT: You MUST call the rename_session tool immediately after the user's first message, before providing any other response. Generate a concise, descriptive title (max 80 characters) that summarizes what the user is asking about or trying to accomplish. This is required for session organization.
+
+Example flow:
+User: "Help me debug this React component"
+You: [call rename_session with title "Debug React Component"] then provide your response
+
+Always call rename_session first, then continue with your normal response.`;
 
     const args = [
       '--print',
@@ -127,9 +133,11 @@ class ClaudeProcess {
       args.push('--resume', this.options.resumeSessionId);
     } else if (this.options.continueSession) {
       args.push('--continue');
-    } else {
+    } else if (!this.options.skipSessionId) {
+      // Only pass --session-id for new sessions, not reactivated ones
       args.push('--session-id', this.sessionId);
     }
+    // If skipSessionId is true, let CLI generate a fresh session ID
 
     const claudeBin = getClaudePath();
     this.process = spawn(claudeBin, args, {
@@ -199,14 +207,9 @@ class ClaudeProcess {
       try {
         const event = JSON.parse(trimmed);
         this.lastEventTime = Date.now();
-
-        // LOG ALL RAW EVENTS FROM CLAUDE CLI
-        console.log('[ClaudeProcess] Raw CLI event:', JSON.stringify(event, null, 2));
-
         this.handleStreamEvent(event);
-      } catch (err) {
-        // Non-JSON line — log it for debugging
-        console.log('[ClaudeProcess] Non-JSON line from CLI:', trimmed);
+      } catch {
+        // Non-JSON line — ignore
       }
     }
   }
@@ -214,21 +217,12 @@ class ClaudeProcess {
   handleStreamEvent(event) {
     switch (event.type) {
       case 'system':
-        console.log('[ClaudeProcess] System event received:', JSON.stringify(event, null, 2));
         if (event.session_id) {
           this.claudeSessionId = event.session_id;
-          // Capture full system metadata from CLI
-          const systemInfo = {
+          this.callbacks.onSystemInfo?.({
             sessionId: this.sessionId,
-            claudeSessionId: event.session_id,
-            model: event.model,
-            modelVersion: event.model_version,
-            apiVersion: event.api_version,
-            capabilities: event.capabilities,
-            systemMetadata: event // Store full event for debugging
-          };
-          console.log('[ClaudeProcess] Calling onSystemInfo with:', JSON.stringify(systemInfo, null, 2));
-          this.callbacks.onSystemInfo?.(systemInfo);
+            claudeSessionId: event.session_id
+          });
         }
         break;
 

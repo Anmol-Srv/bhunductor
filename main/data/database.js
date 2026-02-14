@@ -298,36 +298,6 @@ function runMigrations() {
       console.error(`[Database] Migration failed: ${MIGRATION_DEDUP_ARCHIVED}`, error);
     }
   }
-
-  // Migration 9: Add model metadata columns to claude_sessions table
-  const MIGRATION_ADD_MODEL_METADATA = 'add_model_metadata_to_claude_sessions';
-
-  if (!hasMigrationRun(MIGRATION_ADD_MODEL_METADATA)) {
-    try {
-      const tableInfo = db.pragma('table_info(claude_sessions)');
-      const hasModel = tableInfo.some(col => col.name === 'model');
-      const hasModelVersion = tableInfo.some(col => col.name === 'model_version');
-      const hasApiVersion = tableInfo.some(col => col.name === 'api_version');
-      const hasSystemMetadata = tableInfo.some(col => col.name === 'system_metadata');
-
-      if (!hasModel) {
-        db.exec('ALTER TABLE claude_sessions ADD COLUMN model TEXT');
-      }
-      if (!hasModelVersion) {
-        db.exec('ALTER TABLE claude_sessions ADD COLUMN model_version TEXT');
-      }
-      if (!hasApiVersion) {
-        db.exec('ALTER TABLE claude_sessions ADD COLUMN api_version TEXT');
-      }
-      if (!hasSystemMetadata) {
-        db.exec('ALTER TABLE claude_sessions ADD COLUMN system_metadata TEXT');
-      }
-
-      markMigrationApplied(MIGRATION_ADD_MODEL_METADATA);
-    } catch (error) {
-      console.error(`[Database] Migration failed: ${MIGRATION_ADD_MODEL_METADATA}`, error);
-    }
-  }
 }
 
 /**

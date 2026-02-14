@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { ChevronRight, ChevronDown, Loader, Check, X } from 'lucide-react';
 import ToolUseBlock from './ToolUseBlock';
 
@@ -8,11 +8,6 @@ function ToolCallGroup({ tools }) {
   const hasRunning = tools.some(t => t.status === 'running');
   const hasError = tools.some(t => t.status === 'error');
   const allComplete = tools.every(t => t.status === 'complete');
-
-  // Auto-expand while tools are running
-  useEffect(() => {
-    if (hasRunning) setExpanded(true);
-  }, [hasRunning]);
 
   const groupIcon = () => {
     if (hasRunning) return <Loader size={12} className="spinner tool-status-icon running" />;

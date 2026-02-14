@@ -83,6 +83,7 @@ function BranchItem({
           e.stopPropagation();
           onOpenSession(sessId, worktree.id, worktree.branch_name);
         }}
+        title={sessName}
       >
         <div className="session-info">
           <span className="session-label">{sessName}</span>
@@ -105,6 +106,7 @@ function BranchItem({
           e.stopPropagation();
           onOpenSession(sessId, worktree.id, worktree.branch_name);
         }}
+        title={sessName}
       >
         <div className="session-info">
           <span className="session-label">{sessName}</span>
@@ -147,7 +149,7 @@ function BranchItem({
           e.stopPropagation();
           onUnarchiveAndResume(sessId, worktree.id, worktree.branch_name, session.claude_session_id);
         }}
-        title="Click to resume"
+        title={`${sessName} (Click to resume)`}
       >
         <div className="session-info">
           <span className="session-label">{sessName}</span>

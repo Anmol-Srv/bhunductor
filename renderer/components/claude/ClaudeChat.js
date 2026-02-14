@@ -22,13 +22,14 @@ function ClaudeChat({
   placeholderText = null,
   folderName = null,
   branchName = null,
-  model = 'Sonnet 4.5'
+  model = 'Opus 4.6'
 }) {
   const [input, setInput] = useState('');
   const [copiedId, setCopiedId] = useState(null);
-  const [systemInfo, setSystemInfo] = useState(null);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const chatFeedRef = useRef(null);
+  const shouldAutoScrollRef = useRef(true);
 
   // Single shallow-compared subscription to avoid infinite re-render loops
   const { _version, isStreaming, streamingMessage, permissionQueue } = useSessionStore(
@@ -45,6 +46,13 @@ function ClaudeChat({
     : useSessionStore.getState().getMessages(sessionId);
 
   const activePermission = permissionQueue[0] || null;
+
+  // Find active AskUserQuestion tool (not complete)
+  const activeAskQuestion = messages.find(m =>
+    m.type === 'tool_use' &&
+    m.toolName === 'AskUserQuestion' &&
+    m.status !== 'complete'
+  );
 
   const { updateMessages, sendMessage, respondToPermission } = useSessionStore.getState();
 
@@ -67,50 +75,28 @@ function ClaudeChat({
     window.electron.invoke('claude:session-save-messages', sessionId, messages).catch(() => {});
   }, [sessionId, _version, isReadOnly]);
 
-  // Auto-scroll
+  // Track scroll position to determine if we should auto-scroll
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const chatFeed = chatFeedRef.current;
+    if (!chatFeed) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = chatFeed;
+      // Consider "at bottom" if within 100px of bottom
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+      shouldAutoScrollRef.current = isNearBottom;
+    };
+
+    chatFeed.addEventListener('scroll', handleScroll);
+    return () => chatFeed.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Auto-scroll only if user is already near bottom
+  useEffect(() => {
+    if (shouldAutoScrollRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [_version, streamingMessage]);
-
-  // Fetch system info on mount and listen for updates
-  useEffect(() => {
-    if (isReadOnly) return;
-
-    // Fetch existing system info from database
-    console.log('[ClaudeChat] Fetching system info for session:', sessionId);
-    window.electron.invoke('claude:session-get-system-info', sessionId).then(result => {
-      console.log('[ClaudeChat] System info fetch result:', result);
-      if (result.success && result.systemInfo) {
-        const info = {
-          model: result.systemInfo.model,
-          modelVersion: result.systemInfo.modelVersion,
-          apiVersion: result.systemInfo.apiVersion,
-          claudeSessionId: result.systemInfo.claudeSessionId
-        };
-        console.log('[ClaudeChat] Setting system info from DB:', info);
-        setSystemInfo(info);
-      }
-    }).catch(err => {
-      console.error('[ClaudeChat] Error fetching system info:', err);
-    });
-
-    // Also listen for real-time updates
-    const unsubscribe = window.electron.on('claude:system-info', (data) => {
-      console.log('[ClaudeChat] Received claude:system-info event:', data);
-      if (data.sessionId === sessionId) {
-        const info = {
-          model: data.model,
-          modelVersion: data.modelVersion,
-          apiVersion: data.apiVersion,
-          claudeSessionId: data.claudeSessionId
-        };
-        console.log('[ClaudeChat] Setting system info from event:', info);
-        setSystemInfo(info);
-      }
-    });
-
-    return () => unsubscribe();
-  }, [sessionId, isReadOnly]);
 
   // Auto-resize textarea
   const autoResize = useCallback(() => {
@@ -132,6 +118,9 @@ function ClaudeChat({
     if (!input.trim()) return;
     const userMessage = input;
     setInput('');
+
+    // Always auto-scroll when sending a new message
+    shouldAutoScrollRef.current = true;
 
     if (isReadOnly && onLazyResume) {
       updateMessages(sessionId, prev => [...prev, {
@@ -160,9 +149,17 @@ function ClaudeChat({
     });
   }, []);
 
-  const handlePermissionResponse = async (approved) => {
+  const handlePermissionResponse = async (approved, answers = null) => {
     if (!activePermission) return;
-    await respondToPermission(sessionId, activePermission.requestId, approved);
+
+    // For AskUserQuestion, send answers object as JSON string in message parameter
+    if (activePermission.tool === 'AskUserQuestion' && answers) {
+      const answersJSON = JSON.stringify({ answers });
+      await window.electron.invoke('claude:permission-respond', activePermission.requestId, true, answersJSON);
+      useSessionStore.getState().shiftPermission(sessionId);
+    } else {
+      await respondToPermission(sessionId, activePermission.requestId, approved);
+    }
   };
 
   const renderMessage = (msg, idx, nextMsg, prevMsg) => {
@@ -205,19 +202,9 @@ function ClaudeChat({
         );
 
       case 'tool_use':
+        // AskUserQuestion is rendered above chat input, not inline
         if (msg.toolName === 'AskUserQuestion') {
-          return (
-            <AskUserQuestionBlock
-              key={msg.toolUseId || idx}
-              toolInput={msg.toolInput}
-              status={msg.status}
-              result={msg.result}
-              sessionId={sessionId}
-              onSubmit={() => handlePermissionResponse(true)}
-              onCancel={() => handlePermissionResponse(false)}
-              hasPermission={activePermission?.tool === 'AskUserQuestion'}
-            />
-          );
+          return null;
         }
         return (
           <ToolUseBlock
@@ -283,17 +270,20 @@ function ClaudeChat({
 
     const flushToolGroup = () => {
       if (toolGroup.length === 0) return;
-      if (toolGroup.length <= 2) {
-        items.push(...toolGroup.map(t => ({ type: 'single', msg: t })));
-      } else {
-        items.push({ type: 'tool_group', tools: [...toolGroup] });
-      }
+      // Always group tool calls together, regardless of count
+      items.push({ type: 'tool_group', tools: [...toolGroup] });
       toolGroup = [];
     };
 
     for (const msg of messages) {
       if (msg.type === 'tool_use') {
-        toolGroup.push(msg);
+        // AskUserQuestion should be rendered separately with its interactive UI
+        if (msg.toolName === 'AskUserQuestion') {
+          flushToolGroup();
+          items.push({ type: 'single', msg });
+        } else {
+          toolGroup.push(msg);
+        }
       } else if (msg.type === 'tool_result') {
         continue;
       } else {
@@ -307,17 +297,12 @@ function ClaudeChat({
 
   const showWelcome = !isReadOnly && messages.length === 0 && !isStreaming;
 
-  // Use actual model from system info if available, otherwise fall back to prop
-  const displayModel = systemInfo?.model || model;
-  const displayModelVersion = systemInfo?.modelVersion;
-
   return (
     <div className="claude-chat">
-      <div className="chat-feed">
+      <div className="chat-feed" ref={chatFeedRef}>
         {showWelcome && (
           <WelcomeBanner
-            model={displayModel}
-            modelVersion={displayModelVersion}
+            model={model}
             branchName={branchName}
           />
         )}
@@ -374,6 +359,40 @@ function ClaudeChat({
           input={activePermission.input}
           onApprove={() => handlePermissionResponse(true)}
           onDeny={() => handlePermissionResponse(false)}
+        />
+      )}
+
+      {activeAskQuestion && (
+        <AskUserQuestionBlock
+          toolInput={activeAskQuestion.toolInput}
+          status={activeAskQuestion.status}
+          result={activeAskQuestion.result}
+          sessionId={sessionId}
+          toolUseId={activeAskQuestion.toolUseId}
+          onSubmit={(answers) => {
+            // Mark tool as complete with answers
+            updateMessages(sessionId, prev => prev.map(m =>
+              m.toolUseId === activeAskQuestion.toolUseId
+                ? { ...m, status: 'complete', result: JSON.stringify({ answers }) }
+                : m
+            ));
+            // Send answers to CLI via permission response
+            if (activePermission?.tool === 'AskUserQuestion') {
+              handlePermissionResponse(true, answers);
+            }
+          }}
+          onCancel={() => {
+            // Mark tool as error/cancelled
+            updateMessages(sessionId, prev => prev.map(m =>
+              m.toolUseId === activeAskQuestion.toolUseId
+                ? { ...m, status: 'error', result: 'Cancelled by user' }
+                : m
+            ));
+            if (activePermission?.tool === 'AskUserQuestion') {
+              handlePermissionResponse(false);
+            }
+          }}
+          hasPermission={true}
         />
       )}
 

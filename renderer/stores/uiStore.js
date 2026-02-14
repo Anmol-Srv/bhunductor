@@ -4,46 +4,124 @@ import { create } from 'zustand';
 const tabKey = (t) => t.id || t.sessionId;
 
 const useUIStore = create((set, get) => ({
-  openTabs: [],
-  activeTabId: null,
+  // Tabs are now stored per folder
+  tabsByFolder: {}, // { folderId: [...tabs] }
+  activeTabByFolder: {}, // { folderId: tabId }
+  activeFolderId: null,
   sidebarCollapsed: false,
   filePanelCollapsed: false,
 
   toggleSidebar: () => set(state => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   toggleFilePanel: () => set(state => ({ filePanelCollapsed: !state.filePanelCollapsed })),
 
+  // Set the active folder (switches tab context)
+  setActiveFolder: (folderId) => set({ activeFolderId: folderId }),
+
+  // Helper to get tabs for current folder
+  getOpenTabs: () => {
+    const state = get();
+    return state.tabsByFolder[state.activeFolderId] || [];
+  },
+
+  // Helper to get active tab ID for current folder
+  getActiveTabId: () => {
+    const state = get();
+    return state.activeTabByFolder[state.activeFolderId] || null;
+  },
+
   openTab: (tab) => set(state => {
+    const folderId = state.activeFolderId;
+    if (!folderId) return state;
+
     const key = tabKey(tab);
-    const exists = state.openTabs.find(t => tabKey(t) === key);
+    const currentTabs = state.tabsByFolder[folderId] || [];
+    const exists = currentTabs.find(t => tabKey(t) === key);
+
     if (exists) {
-      return { activeTabId: key };
+      return {
+        activeTabByFolder: {
+          ...state.activeTabByFolder,
+          [folderId]: key
+        }
+      };
     }
+
     return {
-      openTabs: [...state.openTabs, tab],
-      activeTabId: key
+      tabsByFolder: {
+        ...state.tabsByFolder,
+        [folderId]: [...currentTabs, tab]
+      },
+      activeTabByFolder: {
+        ...state.activeTabByFolder,
+        [folderId]: key
+      }
     };
   }),
 
   closeTab: (id) => set(state => {
-    const filtered = state.openTabs.filter(t => tabKey(t) !== id);
-    let newActiveId = state.activeTabId;
-    if (state.activeTabId === id) {
-      const oldIdx = state.openTabs.findIndex(t => tabKey(t) === id);
+    const folderId = state.activeFolderId;
+    if (!folderId) return state;
+
+    const currentTabs = state.tabsByFolder[folderId] || [];
+    const filtered = currentTabs.filter(t => tabKey(t) !== id);
+
+    let newActiveId = state.activeTabByFolder[folderId];
+    if (newActiveId === id) {
+      const oldIdx = currentTabs.findIndex(t => tabKey(t) === id);
       const newTab = filtered[Math.min(oldIdx, filtered.length - 1)];
       newActiveId = newTab ? tabKey(newTab) : null;
     }
-    return { openTabs: filtered, activeTabId: newActiveId };
+
+    return {
+      tabsByFolder: {
+        ...state.tabsByFolder,
+        [folderId]: filtered
+      },
+      activeTabByFolder: {
+        ...state.activeTabByFolder,
+        [folderId]: newActiveId
+      }
+    };
   }),
 
-  switchTab: (id) => set({ activeTabId: id }),
+  switchTab: (id) => set(state => {
+    const folderId = state.activeFolderId;
+    if (!folderId) return state;
 
-  updateTabTitle: (id, title) => set(state => ({
-    openTabs: state.openTabs.map(t =>
-      tabKey(t) === id ? { ...t, title, name: title } : t
-    )
-  })),
+    return {
+      activeTabByFolder: {
+        ...state.activeTabByFolder,
+        [folderId]: id
+      }
+    };
+  }),
 
-  isTabOpen: (id) => get().openTabs.some(t => tabKey(t) === id)
+  updateTabTitle: (id, title) => set(state => {
+    const folderId = state.activeFolderId;
+    if (!folderId) return state;
+
+    const currentTabs = state.tabsByFolder[folderId] || [];
+    return {
+      tabsByFolder: {
+        ...state.tabsByFolder,
+        [folderId]: currentTabs.map(t =>
+          tabKey(t) === id ? { ...t, title, name: title } : t
+        )
+      }
+    };
+  }),
+
+  isTabOpen: (id) => {
+    const state = get();
+    const folderId = state.activeFolderId;
+    if (!folderId) return false;
+    const currentTabs = state.tabsByFolder[folderId] || [];
+    return currentTabs.some(t => tabKey(t) === id);
+  }
 }));
+
+// Selectors for reactive access
+export const selectOpenTabs = (state) => state.tabsByFolder[state.activeFolderId] || [];
+export const selectActiveTabId = (state) => state.activeTabByFolder[state.activeFolderId] || null;
 
 export default useUIStore;

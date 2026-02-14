@@ -67,34 +67,6 @@ class SessionService {
       }
     });
 
-    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_GET_SYSTEM_INFO, async (event, sessionId) => {
-      try {
-        const db = getDatabase();
-        const row = db.prepare(`
-          SELECT model, model_version, api_version, claude_session_id
-          FROM claude_sessions
-          WHERE id = ?
-        `).get(sessionId);
-
-        if (!row) {
-          return { success: false, error: 'Session not found' };
-        }
-
-        return {
-          success: true,
-          systemInfo: {
-            model: row.model,
-            modelVersion: row.model_version,
-            apiVersion: row.api_version,
-            claudeSessionId: row.claude_session_id
-          }
-        };
-      } catch (error) {
-        console.error('[SessionService] Error getting system info:', error);
-        return { success: false, error: error.message };
-      }
-    });
-
     ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_SAVE_MESSAGES, async (event, sessionId, messages) => {
       try {
         this.saveSessionMessages(sessionId, messages);
@@ -145,9 +117,9 @@ class SessionService {
       }
     });
 
-    ipcMain.handle(IPC_CHANNELS.CLAUDE_PERMISSION_RESPOND, async (event, requestId, approved) => {
+    ipcMain.handle(IPC_CHANNELS.CLAUDE_PERMISSION_RESPOND, async (event, requestId, approved, message) => {
       try {
-        this.respondToPermission(requestId, approved);
+        this.respondToPermission(requestId, approved, message);
         return { success: true };
       } catch (error) {
         console.error('[SessionService] Error responding to permission:', error);
@@ -393,12 +365,12 @@ class SessionService {
     }
 
     const options = {};
-    // IMPORTANT: Don't use --resume for stopped/exited sessions
-    // This prevents resuming stale pending permissions after app restart
-    // Use --session-id instead to continue conversation without resuming pending state
-    // if (row.claude_session_id) {
-    //   options.resumeSessionId = row.claude_session_id;
-    // }
+    // IMPORTANT: Don't use --resume or --session-id for stopped/exited sessions
+    // This prevents "Session ID already in use" errors and stale permission hangs
+    // Let the CLI generate a fresh session ID on reactivation
+    // We'll update claude_session_id in the DB when we receive the system event
+    options.skipSessionId = true;  // Tell _spawnProcess to not pass --session-id
+
     if (this.permissionPort) {
       options.permissionPort = this.permissionPort;
     }
@@ -469,8 +441,8 @@ class SessionService {
       onExit: (code) => {
         this.handleSessionExit(sessionId, code);
       },
-      onSystemInfo: (systemInfo) => {
-        this.handleSystemInfo(systemInfo.sessionId, systemInfo);
+      onSystemInfo: ({ sessionId: sid, claudeSessionId: csid }) => {
+        this.handleSystemInfo(sid, csid);
       },
       onHistory: (data) => {
         if (hasPreloadedMessages) return;
@@ -516,38 +488,18 @@ class SessionService {
     } catch {}
   }
 
-  handleSystemInfo(sessionId, systemInfo) {
-    console.log('[SessionService] handleSystemInfo called with:', { sessionId, systemInfo });
+  handleSystemInfo(sessionId, claudeSessionId) {
     const db = getDatabase();
-    const { claudeSessionId, model, modelVersion, apiVersion, systemMetadata } = systemInfo;
-
-    // Update session with system metadata
-    const row = db.prepare('SELECT claude_session_id, model FROM claude_sessions WHERE id = ?').get(sessionId);
-    console.log('[SessionService] Current DB row:', row);
-    if (row?.claude_session_id !== claudeSessionId || !row?.model) {
-      console.log('[SessionService] Updating database with system info');
-      db.prepare(`
-        UPDATE claude_sessions
-        SET claude_session_id = ?, model = ?, model_version = ?, api_version = ?, system_metadata = ?
-        WHERE id = ?
-      `).run(claudeSessionId, model, modelVersion, apiVersion, JSON.stringify(systemMetadata), sessionId);
-      console.log('[SessionService] Database updated');
+    const row = db.prepare('SELECT claude_session_id FROM claude_sessions WHERE id = ?').get(sessionId);
+    if (row?.claude_session_id !== claudeSessionId) {
+      db.prepare('UPDATE claude_sessions SET claude_session_id = ? WHERE id = ?').run(claudeSessionId, sessionId);
     }
-
-    // Send system info to renderer for display
-    console.log('[SessionService] Sending claude:system-info event to renderer');
-    this.send('claude:system-info', {
-      sessionId,
-      model,
-      modelVersion,
-      apiVersion,
-      claudeSessionId
-    });
   }
 
   getSessionHistory(sessionId) {
     const messages = this.historyBuffer.get(sessionId) || null;
-    this.historyBuffer.delete(sessionId);
+    // Don't delete - persist for multiple reads
+    // Will be cleaned up when session stops/exits
     return messages;
   }
 
@@ -616,12 +568,12 @@ class SessionService {
     proc.sendMessage(message);
   }
 
-  respondToPermission(requestId, approved) {
+  respondToPermission(requestId, approved, message) {
     const pending = this.pendingPermissions.get(requestId);
     if (!pending) {
       throw new Error(`Permission request ${requestId} not found`);
     }
-    this.permissionServer.respondToPermission(requestId, approved);
+    this.permissionServer.respondToPermission(requestId, approved, message);
     this.pendingPermissions.delete(requestId);
   }
 
@@ -640,6 +592,7 @@ class SessionService {
     if (proc) {
       proc.stop();
       this.activeSessions.delete(sessionId);
+      this.historyBuffer.delete(sessionId);  // Clean up history buffer
       const db = getDatabase();
       db.prepare("UPDATE claude_sessions SET status = 'stopped', last_active_at = CURRENT_TIMESTAMP WHERE id = ?").run(sessionId);
     }

@@ -66,8 +66,8 @@ function AskUserQuestionBlock({ toolInput, status, result, sessionId, onSubmit, 
 
   const doSubmit = useCallback(() => {
     setSubmitted(true);
-    if (onSubmit) onSubmit();
-  }, [onSubmit]);
+    if (onSubmit) onSubmit(answers);
+  }, [onSubmit, answers]);
 
   const doCancel = useCallback(() => {
     setCancelled(true);

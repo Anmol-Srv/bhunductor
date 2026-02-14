@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import MainContent from '../components/MainContent';
@@ -9,17 +10,34 @@ import useBranchStore from '../stores/branchStore';
 import useSessionStore from '../stores/sessionStore';
 import useUIStore from '../stores/uiStore';
 
+const EMPTY_ARRAY = [];
+
 function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoForward }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   const { worktrees, activeWorktree, loading, initialize, loadWorktrees, createBranch, deleteBranch, selectBranch } = useBranchStore();
   const { loadAllSessions, loadArchivedSessions, startSession, deleteSession, archiveSession, unarchiveAndResume, lazyResume, loadLastSession, pendingResumeSession, clearPendingResumeSession, sessionsByWorktree, archivedSessionsByWorktree, getMessages, setMessages, saveMessages, clearMessages } = useSessionStore();
-  const { openTabs, activeTabId, openTab, closeTab, switchTab, sidebarCollapsed, toggleSidebar, filePanelCollapsed, toggleFilePanel } = useUIStore();
+  const { setActiveFolder, openTab, closeTab, switchTab, sidebarCollapsed, toggleSidebar, filePanelCollapsed, toggleFilePanel } = useUIStore();
+
+  // Subscribe to folder-specific tabs with shallow comparison to prevent infinite loops
+  const { openTabs, activeTabId } = useUIStore(
+    useShallow(state => {
+      const folderId = state.activeFolderId;
+      return {
+        openTabs: folderId ? (state.tabsByFolder[folderId] || EMPTY_ARRAY) : EMPTY_ARRAY,
+        activeTabId: folderId ? (state.activeTabByFolder[folderId] || null) : null
+      };
+    })
+  );
 
   // Initialize worktrees and load sessions on mount
   useEffect(() => {
     if (!folder) return;
+
+    // Set this folder as active in UI store (switches tab context)
+    setActiveFolder(folder.id);
+
     (async () => {
       const result = await initialize(folder);
       if (result) {
@@ -29,7 +47,7 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
         }
       }
     })();
-  }, [folder]);
+  }, [folder, setActiveFolder]);
 
   const handleCreateBranch = async (branchName) => {
     const result = await createBranch(folder.id, folder.path, branchName);
@@ -76,7 +94,7 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
         worktreeId,
         branchName: targetWorktree.branch_name,
         folderName: folder.name,
-        model: 'Sonnet 4.5',
+        model: 'Opus 4.6',
         title: session.title || session.name || null
       });
       return session;
@@ -114,7 +132,7 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
       worktreeId,
       branchName,
       folderName: folder.name,
-      model: 'Sonnet 4.5',
+      model: 'Opus 4.6',
       title: session?.title || session?.name || null
     });
   }, [sessionsByWorktree, handleStartSession]);
@@ -125,6 +143,12 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
   }, []);
 
   const handleCloseTab = useCallback((sessionId, shouldStop) => {
+    // Special case: closing pending resume session
+    if (sessionId === null) {
+      clearPendingResumeSession();
+      return;
+    }
+
     saveMessages(sessionId);
 
     if (shouldStop) {
@@ -154,11 +178,13 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
         return;
       }
 
-      // Cmd+W — close active tab
+      // Cmd+W — close active tab or pending resume
       if (isMeta && e.key === 'w') {
         e.preventDefault();
         if (activeTabId) {
           handleCloseTab(activeTabId, false);
+        } else if (pendingResumeSession) {
+          handleCloseTab(null, false);
         }
         return;
       }
@@ -166,7 +192,7 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showCreateModal, deleteConfirm, activeWorktree, activeTabId, handleStartSession, handleCloseTab]);
+  }, [showCreateModal, deleteConfirm, activeWorktree, activeTabId, pendingResumeSession, handleStartSession, handleCloseTab]);
 
   const handleLazyResume = useCallback(async (message) => {
     const pending = useSessionStore.getState().pendingResumeSession;
@@ -184,7 +210,7 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
         worktreeId: pending.worktreeId,
         branchName: targetWorktree?.branch_name || pending.branchName,
         folderName: folder.name,
-        model: 'Sonnet 4.5',
+        model: 'Opus 4.6',
         title: pending.title || session.title || session.name || null
       });
     }
@@ -207,7 +233,7 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
         worktreeId,
         branchName,
         folderName: folder.name,
-        model: 'Sonnet 4.5',
+        model: 'Opus 4.6',
         title: session.title || session.name || null
       });
     }

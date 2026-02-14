@@ -37,27 +37,67 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 /* Home Page Styles */
+/* Home / Startup Page */
 .home {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 100vh;
   background: var(--surface-base);
+  overflow: hidden;
 }
 
 .home-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 600px;
+  width: 100%;
+  max-width: 800px;
+  padding: 0 var(--spacing-xl);
+  animation: homeContentFadeIn 0.6s ease-out;
 }
 
-.logo {
-  font-size: 56px;
+@keyframes homeContentFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.home-header {
+  text-align: center;
+  margin-bottom: 80px;
+}
+
+.home-logo {
+  font-size: 72px;
   font-weight: 300;
-  letter-spacing: -2px;
-  margin-bottom: 60px;
+  letter-spacing: -3px;
+  margin: 0 0 var(--spacing-sm) 0;
   color: var(--ink);
+  background: linear-gradient(135deg, var(--ink) 0%, var(--conductor) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: logoGlow 3s ease-in-out infinite;
+}
+
+@keyframes logoGlow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.home-tagline {
+  font-size: 14px;
+  color: var(--ink-secondary);
+  margin: 0;
+  font-weight: 400;
+  letter-spacing: 0.5px;
 }
 
 .error-banner {
@@ -67,99 +107,158 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   border: 1px solid var(--gate-deny);
   border-radius: var(--radius-md);
   color: var(--gate-deny);
-  margin-bottom: var(--spacing-lg);
-  text-align: center;
-}
-
-.recent-section {
-  width: 100%;
   margin-bottom: var(--spacing-xl);
+  text-align: center;
+  font-size: 13px;
 }
 
-.recent-title {
-  font-size: 14px;
-  font-weight: 500;
+.home-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.home-start-section,
+.home-recent-section {
+  background: var(--surface-raised);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  animation: sectionSlideUp 0.5s ease-out;
+}
+
+.home-recent-section {
+  animation-delay: 0s;
+  animation-fill-mode: both;
+}
+
+.home-start-section {
+  animation-delay: 0.1s;
+  animation-fill-mode: both;
+}
+
+@keyframes sectionSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.home-section-title {
+  font-size: 11px;
+  font-weight: 600;
   color: var(--ink-secondary);
   text-transform: uppercase;
   letter-spacing: 1px;
-  margin-bottom: var(--spacing-md);
+  margin: 0 0 var(--spacing-md) 0;
 }
 
-.recent-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  max-height: 400px;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-.folder-item {
-  background: var(--surface-raised);
-  border: 1px solid var(--edge);
-  border-radius: var(--radius-sm);
-  padding: var(--spacing-md);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.folder-item:hover {
-  background: var(--surface-overlay);
-  border-color: var(--edge-strong);
-}
-
-.folder-item-header {
+.home-action-item {
+  width: 100%;
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-xs);
+  gap: var(--spacing-md);
+  padding: 12px var(--spacing-md);
+  background: var(--surface-base);
+  border: 1px solid rgba(var(--conductor-rgb), 0.2);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: left;
 }
 
-.folder-icon {
+.home-action-item:hover {
+  background: var(--surface-overlay);
+  border-color: var(--conductor);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.home-action-item:active {
+  transform: translateY(0);
+}
+
+.home-action-item svg {
+  color: var(--conductor);
+  flex-shrink: 0;
+}
+
+.home-recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.home-recent-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: 10px var(--spacing-md);
+  background: var(--surface-base);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: left;
+  animation: recentItemFadeIn 0.4s ease-out;
+  animation-fill-mode: both;
+}
+
+@keyframes recentItemFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.home-recent-item:hover {
+  background: var(--surface-overlay);
+  border-color: var(--edge-strong);
+  transform: translateX(2px);
+}
+
+.home-recent-item svg {
   color: var(--ink-secondary);
   flex-shrink: 0;
 }
 
-.folder-name {
+.home-recent-item-text {
   flex: 1;
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--ink);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.folder-time {
-  font-size: 12px;
-  color: var(--ink-muted);
-}
-
-.folder-path {
+.home-recent-name {
   font-size: 13px;
-  color: var(--ink-secondary);
-  font-family: var(--font-mono);
-  padding-left: 26px;
+  color: var(--ink);
+  font-weight: 400;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.open-button {
-  background: var(--conductor);
-  color: white;
-  border: none;
-  padding: 12px 36px;
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.open-button:hover {
-  background: var(--conductor-hover);
-}
-
-.open-button:active {
-  opacity: 0.9;
+.home-recent-path {
+  font-size: 11px;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Dashboard Styles */
@@ -1146,8 +1245,11 @@ code, pre, .chat-input-box textarea, .file-tree-name,
    AskUserQuestion — tabbed terminal picker
    ======================================== */
 .ask-block {
-  padding: 6px 24px 10px;
+  padding: 12px 24px 16px;
   outline: none;
+  border-top: 1px solid var(--edge);
+  background-color: var(--surface-raised);
+  flex-shrink: 0;
 }
 
 /* Step tabs — horizontal, minimal */

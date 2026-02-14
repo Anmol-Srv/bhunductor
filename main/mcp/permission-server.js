@@ -87,7 +87,10 @@ class PermissionMCPServer {
         const args = request.params.arguments || {};
         const { title } = args;
 
+        console.error('[MCP Server] rename_session called with title:', title);
+
         if (!title || typeof title !== 'string') {
+          console.error('[MCP Server] rename_session error: title missing or invalid');
           return {
             content: [{
               type: 'text',
@@ -99,6 +102,7 @@ class PermissionMCPServer {
 
         try {
           await this.renameSession(title);
+          console.error('[MCP Server] rename_session succeeded:', title);
           return {
             content: [{
               type: 'text',
@@ -106,6 +110,7 @@ class PermissionMCPServer {
             }]
           };
         } catch (error) {
+          console.error('[MCP Server] rename_session failed:', error.message);
           return {
             content: [{
               type: 'text',
@@ -271,10 +276,14 @@ class PermissionMCPServer {
   async start() {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
+    console.error('[MCP Server] Bhunductor permission server started');
+    console.error('[MCP Server] Session ID:', SESSION_ID);
+    console.error('[MCP Server] Electron port:', ELECTRON_PORT);
   }
 }
 
-    const server = new PermissionMCPServer();
-    server.start().catch((error) => {
-      process.exit(1);
+const server = new PermissionMCPServer();
+server.start().catch((error) => {
+  console.error('[MCP Server] Failed to start:', error);
+  process.exit(1);
 });

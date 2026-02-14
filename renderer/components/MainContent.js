@@ -24,13 +24,28 @@ function MainContent({ openTabs, activeTabId, onSwitchTab, onCloseTab, pendingRe
   // No tabs open — show pending resume or empty state
   if (openTabs.length === 0) {
     if (pendingResumeSession && pendingResumeSession.messages.length > 0) {
+      const handleClosePending = (e) => {
+        e.stopPropagation();
+        // Call the parent's onCloseTab to clear pending resume
+        onCloseTab(null, false);
+      };
+
       return (
         <div className="main-content">
           <div className="tab-bar">
-            <div className="tab-item active">
+            <div
+              className="tab-item active"
+              title={pendingResumeSession.title || `${pendingResumeSession.branchName} / Previous Session`}
+            >
               <span className="tab-label">
                 {pendingResumeSession.title || `${pendingResumeSession.branchName} / Previous Session`}
               </span>
+              <button
+                className="tab-close"
+                onClick={handleClosePending}
+              >
+                <X size={14} />
+              </button>
             </div>
           </div>
           <div className="tab-content">
@@ -96,6 +111,7 @@ function MainContent({ openTabs, activeTabId, onSwitchTab, onCloseTab, pendingRe
               key={key}
               className={`tab-item ${key === activeTabId ? 'active' : ''}`}
               onClick={() => onSwitchTab(key)}
+              title={tab.title || (isFile ? tab.fileName : `${tab.branchName} / ${(tab.sessionId || '').slice(0, 8)}`)}
             >
               {isFile && FileIcon && <FileIcon size={13} className="tab-file-icon" />}
               {!isFile && tabIsStreaming && <span className="tab-status-dot streaming" />}

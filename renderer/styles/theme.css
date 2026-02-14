@@ -9,6 +9,7 @@
 
   /* Conductor — muted teal, the through-line of authority */
   --conductor: #36B5AB;
+  --conductor-rgb: 54, 181, 171;
   --conductor-hover: #2DA39A;
   --conductor-muted: rgba(54, 181, 171, 0.10);
 
