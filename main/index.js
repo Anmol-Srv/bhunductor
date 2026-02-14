@@ -3,11 +3,12 @@ const path = require('path');
 const ConfigManager = require('./data/config-manager');
 const { getDatabase, closeDatabase } = require('./data/database');
 const Folder = require('./data/models/Folder');
-const { registerIPCHandlers } = require('./ipc-handlers');
+const { registerIPC } = require('./ipc/register');
 const { WINDOW_WIDTH, WINDOW_HEIGHT } = require('../shared/constants');
 
 let mainWindow = null;
 let configManager = null;
+let sessionService = null;
 
 function createWindow() {
   const { width, height } = configManager.get('window') || {
@@ -54,8 +55,6 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  console.log('[Main] App ready, initializing...');
-
   // Initialize config manager
   configManager = new ConfigManager();
 
@@ -67,7 +66,7 @@ app.whenReady().then(() => {
   createWindow();
 
   // Register IPC handlers (after window creation for Claude integration)
-  registerIPCHandlers(configManager, mainWindow);
+  sessionService = registerIPC(mainWindow, configManager);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -86,8 +85,10 @@ app.on('window-all-closed', () => {
 });
 
 app.on('quit', () => {
+  if (sessionService) {
+    sessionService.destroy();
+  }
   closeDatabase();
-  console.log('[Main] App quit');
 });
 
 // Handle uncaught exceptions

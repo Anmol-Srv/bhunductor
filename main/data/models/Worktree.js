@@ -59,7 +59,6 @@ class Worktree {
       // Extract branch name from refs/remotes/origin/main
       const match = output.match(/refs\/remotes\/origin\/(.+)/);
       if (match && match[1]) {
-        console.log(`[Worktree] Detected default branch from remote HEAD: ${match[1]}`);
         return match[1];
       }
     } catch (error) {
@@ -72,7 +71,6 @@ class Worktree {
         cwd: folderPath,
         stdio: 'pipe'
       });
-      console.log('[Worktree] Detected default branch: main (exists locally)');
       return 'main';
     } catch (e) {
       try {
@@ -80,7 +78,6 @@ class Worktree {
           cwd: folderPath,
           stdio: 'pipe'
         });
-        console.log('[Worktree] Detected default branch: master (exists locally)');
         return 'master';
       } catch (e2) {
         // Neither main nor master exists
@@ -96,10 +93,8 @@ class Worktree {
       }).trim();
 
       if (remoteBranches.includes('origin/main')) {
-        console.log('[Worktree] Detected default branch: main (exists on remote)');
         return 'main';
       } else if (remoteBranches.includes('origin/master')) {
-        console.log('[Worktree] Detected default branch: master (exists on remote)');
         return 'master';
       }
     } catch (error) {
@@ -116,7 +111,6 @@ class Worktree {
       }).trim();
 
       if (firstBranch) {
-        console.log(`[Worktree] Using first branch as default: ${firstBranch}`);
         return firstBranch;
       }
     } catch (error) {
@@ -124,7 +118,6 @@ class Worktree {
     }
 
     // Last resort: default to 'main'
-    console.log('[Worktree] No branches detected, defaulting to: main');
     return 'main';
   }
 
@@ -215,7 +208,6 @@ class Worktree {
       const Folder = require('./Folder');
       const folder = Folder.findById(folderId);
       if (folder && folder.path !== repoInfo.mainPath) {
-        console.log(`[Worktree] Updating folder path from ${folder.path} to ${repoInfo.mainPath}`);
         // We should use the main path for operations
         folderPath = repoInfo.mainPath;
       }
@@ -245,8 +237,6 @@ class Worktree {
       // Set as active worktree
       const Folder = require('./Folder');
       Folder.updateActiveWorktree(folderId, id);
-
-      console.log(`[Worktree] Initialized main branch: ${branchName}`);
 
       return this.findById(id);
     } catch (error) {
@@ -310,8 +300,6 @@ class Worktree {
         `);
 
         stmt.run(id, folderId, branchName, worktreePath);
-
-        console.log(`[Worktree] Created: ${branchName} at ${worktreePath}`);
 
         return this.findById(id);
       } catch (dbError) {
@@ -401,8 +389,6 @@ class Worktree {
         }
       }
 
-      console.log(`[Worktree] Deleted: ${worktree.branch_name}`);
-
       return { success: true };
     } catch (error) {
       console.error('[Worktree] Error deleting worktree:', error);
@@ -460,7 +446,6 @@ class Worktree {
     // Update worktree's last accessed
     this.updateLastAccessed(worktreeId);
 
-    console.log(`[Worktree] Set active worktree: ${worktreeId} for folder: ${folderId}`);
   }
 
   /**
@@ -471,7 +456,6 @@ class Worktree {
     const db = getDatabase();
 
     try {
-      console.log(`[Worktree] Cleaning up worktrees for folder: ${folderId}`);
 
       // Get main repo path in case folderPath is a worktree
       const repoInfo = this.getMainRepoPath(folderPath);
@@ -480,11 +464,9 @@ class Worktree {
       // Delete all existing worktree entries for this folder
       const deleteStmt = db.prepare('DELETE FROM worktrees WHERE folder_id = ?');
       const result = deleteStmt.run(folderId);
-      console.log(`[Worktree] Deleted ${result.changes} existing worktree entries`);
 
       // Re-initialize the main branch
       const mainWorktree = this.initializeMainBranch(folderId, mainRepoPath);
-      console.log(`[Worktree] Re-initialized main branch: ${mainWorktree.branch_name}`);
 
       return { success: true, mainWorktree };
     } catch (error) {
@@ -502,8 +484,6 @@ class Worktree {
     const db = getDatabase();
 
     try {
-      console.log('[Worktree] Starting migration to fix incorrect worktree data...');
-
       const folders = Folder.findAll();
       let migratedCount = 0;
       let errorCount = 0;
@@ -512,7 +492,6 @@ class Worktree {
         try {
           // Check if folder still exists and is a valid git repo
           if (!fs.existsSync(folder.path) || !Folder.isGitRepo(folder.path)) {
-            console.log(`[Worktree] Skipping invalid folder: ${folder.path}`);
             continue;
           }
 
@@ -521,7 +500,6 @@ class Worktree {
 
           // Update folder path if it was pointing to a worktree
           if (mainRepoPath !== folder.path) {
-            console.log(`[Worktree] Updating folder path: ${folder.path} -> ${mainRepoPath}`);
             const updateStmt = db.prepare('UPDATE folders SET path = ? WHERE id = ?');
             updateStmt.run(mainRepoPath, folder.id);
           }
@@ -529,15 +507,12 @@ class Worktree {
           // Clean up and re-initialize worktrees
           this.cleanupAndReinitialize(folder.id, mainRepoPath);
           migratedCount++;
-
-          console.log(`[Worktree] Migrated folder: ${folder.name} (${folder.id})`);
         } catch (error) {
           console.error(`[Worktree] Error migrating folder ${folder.id}:`, error);
           errorCount++;
         }
       }
 
-      console.log(`[Worktree] Migration complete: ${migratedCount} folders migrated, ${errorCount} errors`);
       return { success: true, migratedCount, errorCount };
     } catch (error) {
       console.error('[Worktree] Migration failed:', error);

@@ -1,269 +1,211 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import Editor, { loader } from '@monaco-editor/react';
-import { DiffView, DiffModeEnum } from '@git-diff-view/react';
-import '@git-diff-view/react/styles/diff-view.css';
-import { Code, GitCompare } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import Editor, { DiffEditor, loader } from '@monaco-editor/react';
 
-// Configure Monaco Editor to load from local files instead of CDN
-// This is required for Electron apps due to CSP restrictions
-// Webpack copies monaco-editor files to renderer/vs/ directory
-loader.config({
-  paths: {
-    vs: './vs'
-  }
-});
+// Configure Monaco loader for Electron — serve from local copy
+loader.config({ paths: { vs: './vs' } });
 
-// Module-level content cache (persists across mount/unmount like ClaudeChat)
+// Module-level content cache — survives tab switches (same pattern as ClaudeChat)
 const contentCache = new Map();
 
-function FileViewer({
-  fileId,
-  worktreeId,
-  filePath,
-  relativePath,
-  fileName,
-  hasChanges,
-  changeType
-}) {
-  const [content, setContent] = useState('');
+// Map file extension to Monaco language ID
+const LANG_MAP = {
+  js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
+  ts: 'typescript', tsx: 'typescript',
+  py: 'python', pyw: 'python',
+  rb: 'ruby',
+  rs: 'rust',
+  go: 'go',
+  java: 'java',
+  kt: 'kotlin', kts: 'kotlin',
+  c: 'c', h: 'c',
+  cpp: 'cpp', cc: 'cpp', cxx: 'cpp', hpp: 'cpp',
+  cs: 'csharp',
+  swift: 'swift',
+  php: 'php',
+  html: 'html', htm: 'html',
+  css: 'css',
+  scss: 'scss', sass: 'scss',
+  less: 'less',
+  json: 'json',
+  yaml: 'yaml', yml: 'yaml',
+  xml: 'xml', svg: 'xml',
+  md: 'markdown', mdx: 'markdown',
+  sql: 'sql',
+  sh: 'shell', bash: 'shell', zsh: 'shell',
+  ps1: 'powershell',
+  dockerfile: 'dockerfile',
+  toml: 'ini',
+  ini: 'ini',
+  lua: 'lua',
+  r: 'r',
+  dart: 'dart',
+  graphql: 'graphql', gql: 'graphql'
+};
+
+function detectLanguage(fileName) {
+  if (!fileName) return 'plaintext';
+  const lower = fileName.toLowerCase();
+
+  // Handle special filenames
+  if (lower === 'dockerfile') return 'dockerfile';
+  if (lower === 'makefile') return 'makefile';
+
+  const ext = lower.split('.').pop();
+  return LANG_MAP[ext] || 'plaintext';
+}
+
+function FileViewer({ filePath, relativePath, fileName, worktreeId, folderId, hasChanges, changeType, initialViewMode }) {
+  const [viewMode, setViewMode] = useState(initialViewMode || 'code');
+  const [content, setContent] = useState(null);
   const [diffData, setDiffData] = useState(null);
-  const [viewMode, setViewMode] = useState(hasChanges ? 'diff' : 'code');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  const loadFileData = useCallback(async () => {
-    console.log('[FileViewer] Loading file:', { fileId, filePath, relativePath });
-
-    // Check cache first
-    const cached = contentCache.get(fileId);
-    if (cached) {
-      console.log('[FileViewer] Using cached content for:', fileId);
-      setContent(cached.content);
-      setDiffData(cached.diffData);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    try {
-      console.log('[FileViewer] Invoking file:read-content for:', filePath);
-      // Load file content
-      const contentResult = await window.electron.invoke('file:read-content', filePath);
-      console.log('[FileViewer] Content result:', contentResult);
-
-      if (contentResult.success) {
-        setContent(contentResult.content);
-      } else {
-        if (contentResult.isBinary) {
-          setError('This file appears to be binary and cannot be displayed');
-        } else {
-          setError(contentResult.error || 'Failed to load file content');
-        }
-      }
-
-      // Load diff if file has changes
-      let diffResult = null;
-      if (hasChanges) {
-        diffResult = await window.electron.invoke(
-          'file:get-git-diff',
-          worktreeId,
-          relativePath
-        );
-
-        if (diffResult.success) {
-          setDiffData({
-            oldContent: diffResult.oldContent || '',
-            newContent: diffResult.newContent || contentResult.content || '',
-            diff: diffResult.diff,
-            changeType: diffResult.changeType,
-            isNewFile: diffResult.isNewFile
-          });
-        }
-      }
-
-      // Cache results
-      contentCache.set(fileId, {
-        content: contentResult.content || '',
-        diffData: diffResult?.success ? {
-          oldContent: diffResult.oldContent || '',
-          newContent: diffResult.newContent || contentResult.content || '',
-          diff: diffResult.diff,
-          changeType: diffResult.changeType,
-          isNewFile: diffResult.isNewFile
-        } : null
-      });
-    } catch (error) {
-      console.error('[FileViewer] Failed to load file data:', error);
-      setError(error.message || 'Failed to load file');
-    } finally {
-      setLoading(false);
-    }
-  }, [fileId, filePath, relativePath, worktreeId, hasChanges]);
+  const language = detectLanguage(fileName);
 
   useEffect(() => {
-    loadFileData();
-  }, [loadFileData]);
+    let cancelled = false;
 
-  const detectLanguage = (fileName) => {
-    const ext = fileName.split('.').pop()?.toLowerCase();
-    const langMap = {
-      js: 'javascript',
-      jsx: 'javascript',
-      ts: 'typescript',
-      tsx: 'typescript',
-      py: 'python',
-      rb: 'ruby',
-      go: 'go',
-      rs: 'rust',
-      java: 'java',
-      c: 'c',
-      cpp: 'cpp',
-      cc: 'cpp',
-      h: 'c',
-      hpp: 'cpp',
-      css: 'css',
-      scss: 'scss',
-      sass: 'sass',
-      less: 'less',
-      html: 'html',
-      xml: 'xml',
-      json: 'json',
-      md: 'markdown',
-      yaml: 'yaml',
-      yml: 'yaml',
-      toml: 'toml',
-      sh: 'shell',
-      bash: 'shell',
-      zsh: 'shell',
-      sql: 'sql',
-      php: 'php',
-      cs: 'csharp',
-      swift: 'swift',
-      kt: 'kotlin',
-      r: 'r',
-      dockerfile: 'dockerfile'
+    const loadContent = async () => {
+      // Check cache
+      const cached = contentCache.get(filePath);
+      if (cached) {
+        setContent(cached.content);
+        setDiffData(cached.diffData);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        // Load file content
+        const result = await window.electron.invoke('file:read-content', filePath);
+        if (cancelled) return;
+
+        if (result.success) {
+          setContent(result.content);
+        } else {
+          setError(result.error);
+          setLoading(false);
+          return;
+        }
+
+        // Load diff data if file has changes
+        let loadedDiff = null;
+        if (hasChanges && folderId && worktreeId) {
+          const diffResult = await window.electron.invoke('file:get-git-diff', folderId, worktreeId, relativePath);
+          if (cancelled) return;
+
+          if (diffResult.success) {
+            loadedDiff = {
+              oldContent: diffResult.oldContent || '',
+              newContent: diffResult.newContent || '',
+              changeType: diffResult.changeType
+            };
+            setDiffData(loadedDiff);
+          }
+        }
+
+        // Cache the loaded data
+        contentCache.set(filePath, {
+          content: result.content,
+          diffData: loadedDiff
+        });
+      } catch (err) {
+        if (!cancelled) setError(err.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
-    return langMap[ext] || 'plaintext';
-  };
 
-  if (loading) {
-    return (
-      <div className="file-viewer">
-        <div className="file-viewer-loading">
-          Loading {fileName}...
-        </div>
-      </div>
-    );
-  }
+    loadContent();
+    return () => { cancelled = true; };
+  }, [filePath, relativePath, hasChanges, folderId, worktreeId]);
 
-  if (error) {
-    return (
-      <div className="file-viewer">
-        <div className="file-viewer-header">
-          <div className="file-info">
-            <span className="file-name">{fileName}</span>
-            <span className="file-path">{relativePath}</span>
-          </div>
-        </div>
-        <div className="file-viewer-error">
-          <p>{error}</p>
-        </div>
-      </div>
-    );
-  }
+  const changeLabel = changeType === 'A' || changeType === 'added' ? 'Added'
+    : changeType === 'D' || changeType === 'deleted' ? 'Deleted'
+    : changeType === '?' || changeType === 'untracked' ? 'Untracked'
+    : 'Modified';
+
+  const dirPath = relativePath ? relativePath.split('/').slice(0, -1).join('/') : '';
 
   return (
     <div className="file-viewer">
       <div className="file-viewer-header">
-        <div className="file-info">
-          <span className="file-name">{fileName}</span>
-          <span className="file-path">{relativePath}</span>
-          {changeType && (
-            <span className={`change-type-badge ${changeType}`}>
-              {changeType === 'M' ? 'Modified' :
-               changeType === 'A' ? 'Added' :
-               changeType === 'D' ? 'Deleted' :
-               changeType === '?' ? 'Untracked' :
-               changeType}
-            </span>
-          )}
+        <div className="file-viewer-info">
+          <span className="file-viewer-name">{fileName}</span>
+          {dirPath && <span className="file-viewer-path">{dirPath}/</span>}
+          {hasChanges && <span className={`file-viewer-badge badge-${changeLabel.toLowerCase()}`}>{changeLabel}</span>}
         </div>
-
-        {hasChanges && diffData && (
-          <div className="view-controls">
+        {hasChanges && (
+          <div className="file-viewer-toggle">
             <button
-              className={viewMode === 'code' ? 'active' : ''}
+              className={`file-viewer-toggle-btn ${viewMode === 'code' ? 'active' : ''}`}
               onClick={() => setViewMode('code')}
-              title="View code"
             >
-              <Code size={14} />
-              <span>Code</span>
+              Code
             </button>
             <button
-              className={viewMode === 'diff' ? 'active' : ''}
+              className={`file-viewer-toggle-btn ${viewMode === 'diff' ? 'active' : ''}`}
               onClick={() => setViewMode('diff')}
-              title="View diff"
             >
-              <GitCompare size={14} />
-              <span>Diff</span>
+              Diff
             </button>
           </div>
         )}
       </div>
 
       <div className="file-viewer-content">
-        {viewMode === 'diff' && diffData ? (
-          <div className="diff-container">
-            <DiffView
-              oldFile={{
-                fileName: fileName,
-                content: diffData.oldContent
-              }}
-              newFile={{
-                fileName: fileName,
-                content: diffData.newContent
-              }}
-              diffViewMode={DiffModeEnum.Split}
-              extendData={{
-                oldFile: {
-                  language: detectLanguage(fileName)
-                },
-                newFile: {
-                  language: detectLanguage(fileName)
-                }
-              }}
-            />
-          </div>
-        ) : (
+        {loading && (
+          <div className="file-viewer-loading">Loading file...</div>
+        )}
+
+        {error && (
+          <div className="file-viewer-error">{error}</div>
+        )}
+
+        {!loading && !error && viewMode === 'code' && content !== null && (
           <Editor
-            height="100%"
-            language={detectLanguage(fileName)}
             value={content}
+            language={language}
             theme="vs-dark"
             options={{
               readOnly: true,
-              minimap: { enabled: true },
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
               fontSize: 13,
               lineNumbers: 'on',
-              scrollBeyondLastLine: false,
+              renderWhitespace: 'none',
               wordWrap: 'off',
-              automaticLayout: true,
-              scrollbar: {
-                verticalScrollbarSize: 10,
-                horizontalScrollbarSize: 10
-              }
+              automaticLayout: true
             }}
           />
+        )}
+
+        {!loading && !error && viewMode === 'diff' && diffData && (
+          <DiffEditor
+            original={diffData.oldContent}
+            modified={diffData.newContent}
+            language={language}
+            theme="vs-dark"
+            options={{
+              readOnly: true,
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+              fontSize: 13,
+              renderSideBySide: true,
+              automaticLayout: true
+            }}
+          />
+        )}
+
+        {!loading && !error && viewMode === 'diff' && !diffData && (
+          <div className="file-viewer-no-diff">No diff data available</div>
         )}
       </div>
     </div>
   );
 }
-
-// Export cache control methods (same pattern as ClaudeChat)
-FileViewer.getCache = (fileId) => contentCache.get(fileId);
-FileViewer.setCache = (fileId, data) => contentCache.set(fileId, data);
-FileViewer.clearCache = (fileId) => contentCache.delete(fileId);
 
 export default FileViewer;

@@ -32,12 +32,7 @@ module.exports = {
   },
   plugins: [
     new CopyWebpackPlugin({
-      patterns: [
-        {
-          from: 'node_modules/monaco-editor/min/vs',
-          to: 'vs'
-        }
-      ]
+      patterns: [{ from: 'node_modules/monaco-editor/min/vs', to: 'vs' }]
     })
   ],
   devtool: process.env.NODE_ENV === 'development' ? 'source-map' : false

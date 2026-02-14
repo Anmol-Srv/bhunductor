@@ -231,49 +231,44 @@ function BranchItem({
           {activeSessions.map(renderActiveSession)}
           {inactiveSessions.map(renderInactiveSession)}
 
-          {/* Archive section */}
-          <div className="archive-sessions-section">
-            <button
-              className="archive-sessions-toggle"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!archiveExpanded) {
-                  onLoadArchivedSessions(worktree.id);
-                }
-                setArchiveExpanded(!archiveExpanded);
-              }}
-            >
-              <span className="archive-sessions-chevron">
-                {archiveExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-              </span>
-              <Archive size={10} className="archive-icon" />
-              <span className="archive-sessions-label">Archive</span>
-              {archivedSessions.length > 0 && (
-                <span className="archive-sessions-count">{archivedSessions.length}</span>
-              )}
-            </button>
-            {archiveExpanded && (
-              <div className="archive-sessions-list">
-                {archivedSessions.length === 0 ? (
-                  <div className="archive-empty">No archived sessions</div>
-                ) : (
-                  archivedSessions.map(renderArchivedSession)
-                )}
-              </div>
-            )}
-          </div>
+          {/* New session button */}
+          <button
+            className="new-session-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              onStartSession(worktree.id);
+            }}
+          >
+            <Plus size={12} />
+            <span>New session</span>
+          </button>
 
-          {!hasSessions && (
-            <button
-              className="new-session-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                onStartSession(worktree.id);
-              }}
-            >
-              <Plus size={12} />
-              <span>New session</span>
-            </button>
+          {/* Archive section - only show if there are archived sessions */}
+          {archivedSessions.length > 0 && (
+            <div className="archive-sessions-section">
+              <button
+                className="archive-sessions-toggle"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!archiveExpanded) {
+                    onLoadArchivedSessions(worktree.id);
+                  }
+                  setArchiveExpanded(!archiveExpanded);
+                }}
+              >
+                <span className="archive-sessions-chevron">
+                  {archiveExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                </span>
+                <Archive size={10} className="archive-icon" />
+                <span className="archive-sessions-label">Archive</span>
+                <span className="archive-sessions-count">{archivedSessions.length}</span>
+              </button>
+              {archiveExpanded && (
+                <div className="archive-sessions-list">
+                  {archivedSessions.map(renderArchivedSession)}
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}

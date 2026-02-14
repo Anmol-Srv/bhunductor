@@ -1,49 +1,49 @@
-/* Dark minimal theme — sharp, modern SaaS */
+/* Bhunductor — cold graphite, teal conductor */
 :root {
-  /* Background colors */
-  --bg-primary: #09090b;
-  --bg-secondary: #111113;
-  --bg-tertiary: #18181b;
-  --bg-hover: #222226;
-  --bg-user-msg: #18181b;
+  /* Surfaces — cool graphite, whisper-quiet elevation */
+  --surface-base: #09090b;
+  --surface-raised: #111114;
+  --surface-overlay: #18181c;
+  --surface-hover: #222228;
+  --surface-input: #141418;
 
-  /* Accent colors — muted, functional */
-  --accent-primary: #3b82f6;
-  --accent-secondary: #2563eb;
-  --accent-muted: rgba(59, 130, 246, 0.12);
+  /* Conductor — muted teal, the through-line of authority */
+  --conductor: #36B5AB;
+  --conductor-hover: #2DA39A;
+  --conductor-muted: rgba(54, 181, 171, 0.10);
 
-  /* Text colors */
-  --text-primary: #e4e4e7;
-  --text-secondary: #a1a1aa;
-  --text-tertiary: #52525b;
+  /* Ink — text hierarchy */
+  --ink: #e4e4e7;
+  --ink-secondary: #a1a1aa;
+  --ink-muted: #52525b;
 
-  /* Border colors */
-  --border-primary: #1f1f23;
-  --border-secondary: #27272a;
+  /* Edges — border hierarchy, barely visible structure */
+  --edge: rgba(255, 255, 255, 0.06);
+  --edge-strong: rgba(255, 255, 255, 0.09);
 
-  /* Status colors */
-  --success: #22c55e;
-  --error: #ef4444;
-  --warning: #eab308;
+  /* Signals */
+  --stream-live: #22c55e;
+  --gate-deny: #ef4444;
+  --gate-caution: #d4a017;
 
-  /* Shadows */
+  /* Shadows — dark mode, minimal */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.6);
   --shadow-xl: 0 8px 24px rgba(0, 0, 0, 0.7);
 
-  /* Fonts */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
-  --font-mono: 'SF Mono', 'JetBrains Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  /* Typography — Inter for UI, JetBrains Mono for code */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', Monaco, Consolas, monospace;
 
-  /* Spacing */
+  /* Spacing — 4px base */
   --spacing-xs: 4px;
   --spacing-sm: 8px;
   --spacing-md: 16px;
   --spacing-lg: 24px;
   --spacing-xl: 32px;
 
-  /* Border radius — sharp */
+  /* Radii — sharp, technical */
   --radius-sm: 3px;
   --radius-md: 5px;
   --radius-lg: 6px;

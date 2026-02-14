@@ -1,10 +1,25 @@
-import React, { useState } from 'react';
-import { X, FileText } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X } from 'lucide-react';
 import ClaudeChat from './claude/ClaudeChat';
 import FileViewer from './FileViewer';
+import useSessionStore from '../stores/sessionStore';
+import { getFileIcon } from '../utils/fileIcons';
+
+/** Get the canonical tab key */
+const tabKey = (t) => t.id || t.sessionId;
 
 function MainContent({ openTabs, activeTabId, onSwitchTab, onCloseTab, pendingResumeSession, onLazyResume }) {
-  const [closeConfirm, setCloseConfirm] = useState(null); // sessionId being confirmed
+  const [closeConfirm, setCloseConfirm] = useState(null);
+
+  // Escape to dismiss close-tab confirm
+  useEffect(() => {
+    if (!closeConfirm) return;
+    const handleKey = (e) => {
+      if (e.key === 'Escape') setCloseConfirm(null);
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [closeConfirm]);
 
   // No tabs open — show pending resume or empty state
   if (openTabs.length === 0) {
@@ -36,24 +51,25 @@ function MainContent({ openTabs, activeTabId, onSwitchTab, onCloseTab, pendingRe
     return (
       <div className="main-content">
         <div className="empty-state">
-          <h2>No Active Claude Session</h2>
-          <p>Expand a branch in the sidebar and click "+ New session" to start</p>
+          <div className="empty-state-icon">&#9671;</div>
+          <h2>Start a Claude Session</h2>
+          <p>Select a branch in the sidebar and click "New session" to begin</p>
         </div>
       </div>
     );
   }
 
-  const handleTabClose = (e, tabId) => {
+  const handleTabClose = (e, tab) => {
     e.stopPropagation();
+    const key = tabKey(tab);
 
-    // For file tabs, close immediately without confirmation
-    if (isFileTab(tabId)) {
-      onCloseTab(tabId, false);
+    // File tabs close immediately — no session stop prompt
+    if (tab.type === 'file') {
+      onCloseTab(key, false);
       return;
     }
 
-    // For Claude session tabs, show confirmation modal
-    setCloseConfirm(tabId);
+    setCloseConfirm(key);
   };
 
   const handleCloseConfirm = (action) => {
@@ -65,77 +81,30 @@ function MainContent({ openTabs, activeTabId, onSwitchTab, onCloseTab, pendingRe
     setCloseConfirm(null);
   };
 
-  const renderTabLabel = (tab) => {
-    const tabType = tab.type || 'claude-session';
-
-    if (tabType === 'file') {
-      return (
-        <>
-          <FileText size={14} className="tab-icon" />
-          <span className="tab-label">{tab.fileName}</span>
-          {tab.hasChanges && <span className="modified-indicator">●</span>}
-        </>
-      );
-    }
-
-    // Claude session tab
-    return (
-      <span className="tab-label">
-        {tab.title || `${tab.branchName} / ${tab.sessionId.slice(0, 8)}`}
-      </span>
-    );
-  };
-
-  const renderTabContent = (tab) => {
-    const tabType = tab.type || 'claude-session';
-
-    if (tabType === 'file') {
-      return (
-        <FileViewer
-          fileId={tab.fileId}
-          worktreeId={tab.worktreeId}
-          filePath={tab.filePath}
-          relativePath={tab.relativePath}
-          fileName={tab.fileName}
-          hasChanges={tab.hasChanges}
-          changeType={tab.changeType}
-        />
-      );
-    }
-
-    // Claude session
-    return <ClaudeChat sessionId={tab.sessionId} />;
-  };
-
-  const getTabId = (tab) => {
-    const tabType = tab.type || 'claude-session';
-    return tabType === 'file' ? tab.fileId : tab.sessionId;
-  };
-
-  // Check if a tab is a file tab (for close confirmation)
-  const isFileTab = (tabId) => {
-    const tab = openTabs.find(t => getTabId(t) === tabId);
-    return tab && tab.type === 'file';
-  };
-
   return (
     <div className="main-content">
       {/* Tab bar */}
       <div className="tab-bar">
         {openTabs.map(tab => {
-          const tabId = getTabId(tab);
-          const tabType = tab.type || 'claude-session';
-
+          const key = tabKey(tab);
+          const isFile = tab.type === 'file';
+          const streamState = !isFile ? useSessionStore.getState().streamingState[tab.sessionId] : null;
+          const tabIsStreaming = streamState?.isStreaming || false;
+          const FileIcon = isFile ? getFileIcon(tab.fileName) : null;
           return (
             <div
-              key={tabId}
-              className={`tab-item ${tabType} ${tabId === activeTabId ? 'active' : ''}`}
-              onClick={() => onSwitchTab(tabId)}
+              key={key}
+              className={`tab-item ${key === activeTabId ? 'active' : ''}`}
+              onClick={() => onSwitchTab(key)}
             >
-              {renderTabLabel(tab)}
+              {isFile && FileIcon && <FileIcon size={13} className="tab-file-icon" />}
+              {!isFile && tabIsStreaming && <span className="tab-status-dot streaming" />}
+              <span className="tab-label">
+                {tab.title || (isFile ? tab.fileName : `${tab.branchName} / ${(tab.sessionId || '').slice(0, 8)}`)}
+              </span>
               <button
                 className="tab-close"
-                onClick={(e) => handleTabClose(e, tabId)}
+                onClick={(e) => handleTabClose(e, tab)}
               >
                 <X size={14} />
               </button>
@@ -147,22 +116,39 @@ function MainContent({ openTabs, activeTabId, onSwitchTab, onCloseTab, pendingRe
       {/* Tab panels — all rendered, only active visible */}
       <div className="tab-content">
         {openTabs.map(tab => {
-          const tabId = getTabId(tab);
-
+          const key = tabKey(tab);
           return (
             <div
-              key={tabId}
+              key={key}
               className="tab-panel"
-              style={{ display: tabId === activeTabId ? 'flex' : 'none' }}
+              style={{ display: key === activeTabId ? 'flex' : 'none' }}
             >
-              {renderTabContent(tab)}
+              {tab.type === 'file' ? (
+                <FileViewer
+                  filePath={tab.filePath}
+                  relativePath={tab.relativePath}
+                  fileName={tab.fileName}
+                  worktreeId={tab.worktreeId}
+                  folderId={tab.folderId}
+                  hasChanges={tab.hasChanges}
+                  changeType={tab.changeType}
+                  initialViewMode={tab.viewMode}
+                />
+              ) : (
+                <ClaudeChat
+                  sessionId={tab.sessionId}
+                  branchName={tab.branchName}
+                  folderName={tab.folderName}
+                  model={tab.model}
+                />
+              )}
             </div>
           );
         })}
       </div>
 
-      {/* Close confirmation modal (only for Claude sessions, not file tabs) */}
-      {closeConfirm && !isFileTab(closeConfirm) && (
+      {/* Close confirmation modal */}
+      {closeConfirm && (
         <div className="modal-overlay" onClick={() => setCloseConfirm(null)}>
           <div className="modal-content close-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">

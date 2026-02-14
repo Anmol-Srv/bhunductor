@@ -4,6 +4,9 @@ const fs = require('fs');
 const os = require('os');
 const { execSync } = require('child_process');
 
+const SIGKILL_TIMEOUT_MS = 3000;
+const REPLAY_SAFETY_TIMEOUT_MS = 5000;
+
 /**
  * Resolve the full path to the `claude` binary.
  * Electron apps launched from macOS Finder may have a stripped PATH,
@@ -12,7 +15,6 @@ const { execSync } = require('child_process');
 let resolvedClaudePath = null;
 function getClaudePath() {
   if (resolvedClaudePath) return resolvedClaudePath;
-  // Try direct lookup first
   const candidates = [
     path.join(os.homedir(), '.local', 'bin', 'claude'),
     '/usr/local/bin/claude',
@@ -24,7 +26,6 @@ function getClaudePath() {
       return p;
     }
   }
-  // Fallback: ask a login shell
   try {
     resolvedClaudePath = execSync('which claude', {
       shell: process.env.SHELL || '/bin/zsh',
@@ -32,8 +33,28 @@ function getClaudePath() {
     }).toString().trim();
     return resolvedClaudePath;
   } catch {
-    // Last resort: hope it's on PATH
     return 'claude';
+  }
+}
+
+/**
+ * Validate that the Claude CLI is installed and return version info.
+ * @returns {{ available: boolean, path: string|null, version: string|null, error: string|null }}
+ */
+function validateCLI() {
+  const claudeBin = getClaudePath();
+  if (claudeBin === 'claude') {
+    return { available: false, path: null, version: null, error: 'Claude CLI not found in any known location' };
+  }
+  try {
+    const version = execSync(`"${claudeBin}" --version`, {
+      stdio: 'pipe',
+      encoding: 'utf-8',
+      timeout: 5000
+    }).trim();
+    return { available: true, path: claudeBin, version, error: null };
+  } catch (err) {
+    return { available: true, path: claudeBin, version: null, error: `Failed to get version: ${err.message}` };
   }
 }
 
@@ -41,8 +62,8 @@ class ClaudeProcess {
   constructor(sessionId, workingDir, callbacks, options = {}) {
     this.sessionId = sessionId;
     this.workingDir = workingDir;
-    this.callbacks = callbacks; // { onChunk, onComplete, onError, onExit, onSystemInfo, onHistory, onToolUse, onToolResult, onThinking, onTurnComplete }
-    this.options = options; // { resumeSessionId, continueSession, permissionPort }
+    this.callbacks = callbacks;
+    this.options = options;
     this.buffer = '';
     this.process = null;
     this.currentContentBlock = null;
@@ -51,7 +72,20 @@ class ClaudeProcess {
     this.historyMessages = [];
     this.replayTimer = null;
     this.mcpConfigPath = null;
-    this.hasStreamedContent = false; // true once content_block_* events arrive (skips assistant event re-processing)
+    this.hasStreamedContent = false;
+
+    // Tool use deduplication: track IDs forwarded via content_block_stop
+    this.forwardedToolUseIds = new Set();
+
+    // stdin backpressure: queue messages when stdin is full
+    this.stdinQueue = [];
+    this.stdinDraining = false;
+
+    // Process health: track last event time
+    this.lastEventTime = Date.now();
+
+    // stderr capture for error context
+    this.recentStderr = [];
   }
 
   start() {
@@ -76,13 +110,16 @@ class ClaudeProcess {
     fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
     this.mcpConfigPath = mcpConfigPath;
 
+    const systemPrompt = `After receiving the first user message, use the rename_session tool to give this conversation a concise, descriptive title that summarizes the main topic or purpose (max 80 characters). This helps with session organization and navigation.`;
+
     const args = [
       '--print',
       '--input-format', 'stream-json',
       '--output-format', 'stream-json',
-      '--model', 'haiku',
+      // '--model', 'haiku',
       '--mcp-config', mcpConfigPath,
       '--permission-prompt-tool', 'mcp__bhunductor-permissions__request_permission',
+      '--append-system-prompt', systemPrompt,
       '--verbose'
     ];
 
@@ -91,13 +128,10 @@ class ClaudeProcess {
     } else if (this.options.continueSession) {
       args.push('--continue');
     } else {
-      // New session: pass our UUID so claude_session_id is known from the start
       args.push('--session-id', this.sessionId);
     }
 
     const claudeBin = getClaudePath();
-    console.log('[Claude CLI] Spawning:', claudeBin, args.join(' '));
-
     this.process = spawn(claudeBin, args, {
       cwd: this.workingDir,
       env: {
@@ -108,7 +142,6 @@ class ClaudeProcess {
       detached: true
     });
 
-    // Don't let the child keep Electron alive
     this.process.unref();
 
     this.process.stdout.on('data', (data) => {
@@ -117,12 +150,33 @@ class ClaudeProcess {
     });
 
     this.process.stderr.on('data', (data) => {
-      const text = data.toString();
-      console.log('[Claude CLI stderr]', text.trim());
+      const text = data.toString().trim();
+      if (text) {
+        console.error('[Claude CLI stderr]', text);
+        // Keep last 5 stderr lines for error context
+        this.recentStderr.push(text);
+        if (this.recentStderr.length > 5) this.recentStderr.shift();
+      }
+    });
+
+    // Handle stdin errors (broken pipe, etc.)
+    this.process.stdin.on('error', (err) => {
+      console.error('[Claude CLI] stdin error:', err.message);
     });
 
     this.process.on('exit', (code, signal) => {
-      console.log('[Claude CLI] Process exited:', { code, signal });
+      if (code !== 0 && code !== null) {
+        const stderrContext = this.recentStderr.length > 0
+          ? this.recentStderr.join('\n')
+          : 'No stderr output captured';
+        this.callbacks.onError({
+          sessionId: this.sessionId,
+          error: `Claude CLI exited with code ${code}${signal ? ` (signal: ${signal})` : ''}`,
+          exitCode: code,
+          signal,
+          stderr: stderrContext
+        });
+      }
       this.callbacks.onExit(code);
     });
 
@@ -144,10 +198,15 @@ class ClaudeProcess {
       if (!trimmed) continue;
       try {
         const event = JSON.parse(trimmed);
-        console.log('[Claude CLI] Received event:', event.type);
+        this.lastEventTime = Date.now();
+
+        // LOG ALL RAW EVENTS FROM CLAUDE CLI
+        console.log('[ClaudeProcess] Raw CLI event:', JSON.stringify(event, null, 2));
+
         this.handleStreamEvent(event);
       } catch (err) {
-        // Non-JSON line (PTY stderr mixed in) — ignore
+        // Non-JSON line — log it for debugging
+        console.log('[ClaudeProcess] Non-JSON line from CLI:', trimmed);
       }
     }
   }
@@ -155,12 +214,21 @@ class ClaudeProcess {
   handleStreamEvent(event) {
     switch (event.type) {
       case 'system':
+        console.log('[ClaudeProcess] System event received:', JSON.stringify(event, null, 2));
         if (event.session_id) {
           this.claudeSessionId = event.session_id;
-          this.callbacks.onSystemInfo?.({
+          // Capture full system metadata from CLI
+          const systemInfo = {
             sessionId: this.sessionId,
-            claudeSessionId: event.session_id
-          });
+            claudeSessionId: event.session_id,
+            model: event.model,
+            modelVersion: event.model_version,
+            apiVersion: event.api_version,
+            capabilities: event.capabilities,
+            systemMetadata: event // Store full event for debugging
+          };
+          console.log('[ClaudeProcess] Calling onSystemInfo with:', JSON.stringify(systemInfo, null, 2));
+          this.callbacks.onSystemInfo?.(systemInfo);
         }
         break;
 
@@ -193,10 +261,10 @@ class ClaudeProcess {
               this.historyMessages.push({ role: 'assistant', type: 'text', text: texts.join('') });
             }
           } else if (!this.hasStreamedContent) {
-            // Only process assistant event content if no streaming events were received
-            // (streaming events already forwarded text/tool_use/thinking in correct order)
             for (const block of contentArray) {
               if (block.type === 'tool_use') {
+                // Skip if already forwarded via content_block_stop
+                if (this.forwardedToolUseIds.has(block.id)) continue;
                 this.callbacks.onToolUse?.({
                   sessionId: this.sessionId,
                   toolUseId: block.id,
@@ -222,11 +290,6 @@ class ClaudeProcess {
         break;
 
       case 'result':
-        console.log('[Claude CLI] result event:', {
-          stop_reason: event?.stop_reason,
-          cost: event?.total_cost_usd,
-          usage: event?.usage
-        });
         if (this.isReplayingHistory) {
           if (this.callbacks.onHistory && this.historyMessages.length > 0) {
             this.callbacks.onHistory({
@@ -234,10 +297,10 @@ class ClaudeProcess {
               messages: [...this.historyMessages]
             });
           }
+          // Safety timeout for replay finalization
           if (this.replayTimer) clearTimeout(this.replayTimer);
-          this.replayTimer = setTimeout(() => this.finalizeReplay(), 500);
+          this.replayTimer = setTimeout(() => this.finalizeReplay(), REPLAY_SAFETY_TIMEOUT_MS);
         } else {
-          // Commit streaming text first, then show cost badge
           this.callbacks.onComplete({ sessionId: this.sessionId });
           this.callbacks.onTurnComplete?.({
             sessionId: this.sessionId,
@@ -250,7 +313,6 @@ class ClaudeProcess {
         break;
 
       case 'error':
-        console.log('[Claude CLI] error event:', event);
         this.callbacks.onError({
           sessionId: this.sessionId,
           error: event.error?.message || event.message || 'Unknown error'
@@ -260,6 +322,7 @@ class ClaudeProcess {
       case 'message_start':
         this.currentContentBlock = null;
         this.hasStreamedContent = false;
+        this.forwardedToolUseIds.clear();
         break;
 
       case 'content_block_start':
@@ -271,7 +334,6 @@ class ClaudeProcess {
             name: event.content_block.name,
             inputJson: ''
           };
-          // Forward tool_use start immediately (shows spinner in UI)
           this.callbacks.onToolUse?.({
             sessionId: this.sessionId,
             toolUseId: event.content_block.id,
@@ -308,8 +370,9 @@ class ClaudeProcess {
       case 'content_block_stop':
         if (this.currentContentBlock?.type === 'tool_use') {
           let parsedInput = null;
-          try { parsedInput = JSON.parse(this.currentContentBlock.inputJson); } catch {}
-          // Update tool_use with parsed input
+          try { parsedInput = JSON.parse(this.currentContentBlock.inputJson); } catch { }
+          // Track this ID to prevent duplicate from assistant event
+          this.forwardedToolUseIds.add(this.currentContentBlock.id);
           this.callbacks.onToolUse?.({
             sessionId: this.sessionId,
             toolUseId: this.currentContentBlock.id,
@@ -329,7 +392,6 @@ class ClaudeProcess {
         break;
 
       case 'message_stop':
-        console.log('[Claude CLI] message_stop event');
         if (!this.isReplayingHistory) {
           this.callbacks.onComplete({ sessionId: this.sessionId });
         }
@@ -339,7 +401,6 @@ class ClaudeProcess {
         if (event.message && event.message.content) {
           const content = event.message.content;
 
-          // Forward tool_result blocks (tool results come as user messages)
           if (Array.isArray(content)) {
             for (const block of content) {
               if (block.type === 'tool_result') {
@@ -359,7 +420,6 @@ class ClaudeProcess {
             if (typeof content === 'string') {
               text = content;
             } else if (Array.isArray(content)) {
-              // Collect tool_result blocks for history too
               for (const block of content) {
                 if (block.type === 'tool_result') {
                   this.historyMessages.push({
@@ -394,7 +454,6 @@ class ClaudeProcess {
       this.replayTimer = null;
     }
     this.isReplayingHistory = false;
-    console.log(`[Claude CLI] Replay finalized with ${this.historyMessages.length} messages`);
     if (this.callbacks.onHistory && this.historyMessages.length > 0) {
       this.callbacks.onHistory({
         sessionId: this.sessionId,
@@ -404,19 +463,51 @@ class ClaudeProcess {
     this.historyMessages = [];
   }
 
+  /**
+   * Send a message to the CLI process with backpressure handling.
+   */
   sendMessage(message) {
     if (this.isReplayingHistory) {
       this.finalizeReplay();
     }
-    if (this.process && this.process.stdin.writable) {
-      const messageObj = {
-        type: 'user',
-        message: {
-          role: 'user',
-          content: message
-        }
-      };
-      this.process.stdin.write(JSON.stringify(messageObj) + '\n');
+    if (!this.process || !this.process.stdin.writable) return;
+
+    const messageObj = {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: message
+      }
+    };
+    const payload = JSON.stringify(messageObj) + '\n';
+
+    if (this.stdinDraining) {
+      this.stdinQueue.push(payload);
+      return;
+    }
+
+    const ok = this.process.stdin.write(payload);
+    if (!ok) {
+      this.stdinDraining = true;
+      this.process.stdin.once('drain', () => {
+        this.stdinDraining = false;
+        this.flushStdinQueue();
+      });
+    }
+  }
+
+  flushStdinQueue() {
+    while (this.stdinQueue.length > 0 && this.process?.stdin.writable) {
+      const payload = this.stdinQueue.shift();
+      const ok = this.process.stdin.write(payload);
+      if (!ok) {
+        this.stdinDraining = true;
+        this.process.stdin.once('drain', () => {
+          this.stdinDraining = false;
+          this.flushStdinQueue();
+        });
+        return;
+      }
     }
   }
 
@@ -427,26 +518,39 @@ class ClaudeProcess {
     }
 
     if (this.process) {
-      try {
-        // Kill the entire process group to clean up child processes (MCP servers)
-        process.kill(-this.process.pid, 'SIGTERM');
-      } catch {
-        try { this.process.kill('SIGTERM'); } catch {}
-      }
+      const proc = this.process;
+      const pid = proc.pid;
       this.process = null;
+
+      try {
+        process.kill(-pid, 'SIGTERM');
+      } catch {
+        try { proc.kill('SIGTERM'); } catch { }
+      }
+
+      // SIGKILL fallback: if process hasn't exited within 3s, force kill
+      const killTimer = setTimeout(() => {
+        try {
+          process.kill(-pid, 'SIGKILL');
+        } catch {
+          try { proc.kill('SIGKILL'); } catch { }
+        }
+      }, SIGKILL_TIMEOUT_MS);
+
+      proc.once('exit', () => clearTimeout(killTimer));
     }
 
+    // Clean up MCP config immediately (no delay)
     if (this.mcpConfigPath) {
       const configPath = this.mcpConfigPath;
       this.mcpConfigPath = null;
-      setTimeout(() => {
-        try {
-          if (fs.existsSync(configPath)) fs.unlinkSync(configPath);
-        } catch {}
-      }, 5000);
+      try {
+        if (fs.existsSync(configPath)) fs.unlinkSync(configPath);
+      } catch { }
     }
   }
 }
 
 module.exports = ClaudeProcess;
 module.exports.getClaudePath = getClaudePath;
+module.exports.validateCLI = validateCLI;

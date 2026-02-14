@@ -1,273 +1,157 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Send, AlertCircle, Copy, Check, Paperclip, ChevronDown, Lightbulb } from 'lucide-react';
+import { Send, Square, AlertCircle, Copy, Check } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import ToolUseBlock from './ToolUseBlock';
 import ToolCallGroup from './ToolCallGroup';
 import ThinkingBlock from './ThinkingBlock';
 import TurnCostBadge from './TurnCostBadge';
 import PermissionPrompt from './PermissionPrompt';
+import StreamLoader from './StreamLoader';
+import AskUserQuestionBlock from './AskUserQuestionBlock';
+import WelcomeBanner from './WelcomeBanner';
+import useSessionStore from '../../stores/sessionStore';
+import { useShallow } from 'zustand/react/shallow';
 
-// Module-level cache: survives component mount/unmount cycles
-const messageCache = new Map();
+const EMPTY_ARRAY = [];
 
-function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onLazyResume = null, placeholderText = null }) {
-  const [messages, setMessages] = useState(() => {
-    if (isReadOnly && initialMessages) return initialMessages;
-    return messageCache.get(sessionId) || [];
-  });
+function ClaudeChat({
+  sessionId,
+  isReadOnly = false,
+  initialMessages = null,
+  onLazyResume = null,
+  placeholderText = null,
+  folderName = null,
+  branchName = null,
+  model = 'Sonnet 4.5'
+}) {
   const [input, setInput] = useState('');
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [streamingMessage, setStreamingMessage] = useState('');
-  const [permissionQueue, setPermissionQueue] = useState([]);
+  const [copiedId, setCopiedId] = useState(null);
+  const [systemInfo, setSystemInfo] = useState(null);
   const messagesEndRef = useRef(null);
+  const textareaRef = useRef(null);
 
-  // In read-only mode, skip all IPC listeners
+  // Single shallow-compared subscription to avoid infinite re-render loops
+  const { _version, isStreaming, streamingMessage, permissionQueue } = useSessionStore(
+    useShallow(s => ({
+      _version: s._messageCacheVersion,
+      isStreaming: s.streamingState[sessionId]?.isStreaming ?? false,
+      streamingMessage: s.streamingState[sessionId]?.streamingMessage ?? '',
+      permissionQueue: s.permissionQueues[sessionId] ?? EMPTY_ARRAY,
+    }))
+  );
+
+  const messages = isReadOnly && initialMessages
+    ? initialMessages
+    : useSessionStore.getState().getMessages(sessionId);
+
+  const activePermission = permissionQueue[0] || null;
+
+  const { updateMessages, sendMessage, respondToPermission } = useSessionStore.getState();
+
+  // On mount: pull buffered history if no cached messages
   useEffect(() => {
     if (isReadOnly) return;
-
-    // Text streaming chunks
-    const unsubChunk = window.electron.on('claude:message-chunk', (data) => {
-      if (data?.sessionId !== sessionId) return;
-      setIsStreaming(true);
-      setStreamingMessage(prev => prev + (data?.text || ''));
-    });
-
-    // Message complete — commit streaming text to messages
-    const unsubComplete = window.electron.on('claude:message-complete', (data) => {
-      if (data?.sessionId !== sessionId) return;
-      setIsStreaming(false);
-      setStreamingMessage(currentMsg => {
-        if (currentMsg) {
-          setMessages(prev => [...prev, {
-            id: crypto.randomUUID(), role: 'assistant', type: 'text', text: currentMsg
-          }]);
-        }
-        return '';
-      });
-    });
-
-    // Tool use events (start + input update)
-    const unsubToolUse = window.electron.on('claude:tool-use', (data) => {
-      if (data?.sessionId !== sessionId) return;
-      // Commit any streaming text before showing tool block
-      setStreamingMessage(currentMsg => {
-        if (currentMsg) {
-          setMessages(prev => [...prev, {
-            id: crypto.randomUUID(), role: 'assistant', type: 'text', text: currentMsg
-          }]);
-        }
-        return '';
-      });
-      setMessages(prev => {
-        const idx = prev.findIndex(m => m.type === 'tool_use' && m.toolUseId === data.toolUseId);
-        if (idx >= 0) {
-          const updated = [...prev];
-          updated[idx] = {
-            ...updated[idx],
-            toolInput: data.toolInput || updated[idx].toolInput,
-            status: data.status
-          };
-          return updated;
-        }
-        return [...prev, {
-          id: data.toolUseId,
-          role: 'assistant',
-          type: 'tool_use',
-          toolUseId: data.toolUseId,
-          toolName: data.toolName,
-          toolInput: data.toolInput,
-          status: data.status || 'running'
-        }];
-      });
-    });
-
-    // Tool result events — attach to matching tool_use
-    const unsubToolResult = window.electron.on('claude:tool-result', (data) => {
-      if (data?.sessionId !== sessionId) return;
-      setMessages(prev => prev.map(m => {
-        if (m.type === 'tool_use' && m.toolUseId === data.toolUseId) {
-          return {
-            ...m,
-            result: data.result,
-            isError: data.isError,
-            status: data.isError ? 'error' : 'complete'
-          };
-        }
-        return m;
-      }));
-    });
-
-    // Thinking events
-    const unsubThinking = window.electron.on('claude:thinking', (data) => {
-      if (data?.sessionId !== sessionId) return;
-      if (data.isPartial) {
-        setMessages(prev => {
-          const lastIdx = prev.length - 1;
-          if (lastIdx >= 0 && prev[lastIdx].type === 'thinking' && prev[lastIdx].isPartial) {
-            const updated = [...prev];
-            updated[lastIdx] = {
-              ...updated[lastIdx],
-              thinking: updated[lastIdx].thinking + data.thinking
-            };
-            return updated;
-          }
-          return [...prev, {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            type: 'thinking',
-            thinking: data.thinking,
-            isPartial: true
-          }];
-        });
-      } else {
-        setMessages(prev => {
-          const lastIdx = prev.length - 1;
-          if (lastIdx >= 0 && prev[lastIdx].type === 'thinking' && prev[lastIdx].isPartial) {
-            const updated = [...prev];
-            updated[lastIdx] = {
-              ...updated[lastIdx],
-              thinking: data.thinking,
-              isPartial: false
-            };
-            return updated;
-          }
-          return [...prev, {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            type: 'thinking',
-            thinking: data.thinking,
-            isPartial: false
-          }];
-        });
-      }
-    });
-
-    // Turn complete (cost/usage)
-    const unsubTurnComplete = window.electron.on('claude:turn-complete', (data) => {
-      if (data?.sessionId !== sessionId) return;
-      if (data.costUsd || data.usage) {
-        setMessages(prev => [...prev, {
-          id: crypto.randomUUID(),
-          role: 'system',
-          type: 'result',
-          costUsd: data.costUsd,
-          usage: data.usage,
-          durationMs: data.durationMs
-        }]);
-      }
-    });
-
-    // Permission requests
-    const unsubPermission = window.electron.on('claude:permission-request', (data) => {
-      if (data?.session_id !== sessionId && data?.sessionId !== sessionId) return;
-      setPermissionQueue(prev => [...prev, data]);
-    });
-
-    // Errors — show inline instead of alert
-    const unsubError = window.electron.on('claude:session-error', (data) => {
-      if (data?.sessionId !== sessionId) return;
-      setMessages(prev => [...prev, {
-        id: crypto.randomUUID(),
-        role: 'system',
-        type: 'error',
-        text: data.error
-      }]);
-    });
-
-    // Conversation history (from resume/continue)
-    const unsubHistory = window.electron.on('claude:conversation-history', (data) => {
-      if (data?.sessionId !== sessionId) return;
-      setMessages(data.messages || []);
-    });
-
-    // Pull buffered history on mount (skip if we already have messages from cache seed)
-    const cached = messageCache.get(sessionId);
-    if (!cached || cached.length === 0) {
+    const cached = useSessionStore.getState().getMessages(sessionId);
+    if (cached.length === 0) {
       window.electron.invoke('claude:session-get-history', sessionId).then(result => {
         if (result?.success && result.messages && result.messages.length > 0) {
-          setMessages(result.messages);
+          useSessionStore.getState().setMessages(sessionId, result.messages);
         }
       }).catch(() => {});
     }
+  }, [sessionId, isReadOnly]);
 
-    return () => {
-      unsubChunk();
-      unsubComplete();
-      unsubToolUse();
-      unsubToolResult();
-      unsubThinking();
-      unsubTurnComplete();
-      unsubPermission();
-      unsubError();
-      unsubHistory();
-    };
-  }, [sessionId]);
-
-  // Sync messages to module-level cache and persist to DB (skip in read-only mode)
+  // Persist messages to DB when they change (skip read-only)
   useEffect(() => {
-    if (isReadOnly) return;
-    messageCache.set(sessionId, messages);
-    if (messages.length > 0) {
-      window.electron.invoke('claude:session-save-messages', sessionId, messages).catch(() => {});
-    }
-  }, [sessionId, messages, isReadOnly]);
+    if (isReadOnly || messages.length === 0) return;
+    window.electron.invoke('claude:session-save-messages', sessionId, messages).catch(() => {});
+  }, [sessionId, _version, isReadOnly]);
 
   // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingMessage]);
+  }, [_version, streamingMessage]);
+
+  // Fetch system info on mount and listen for updates
+  useEffect(() => {
+    if (isReadOnly) return;
+
+    // Fetch existing system info from database
+    console.log('[ClaudeChat] Fetching system info for session:', sessionId);
+    window.electron.invoke('claude:session-get-system-info', sessionId).then(result => {
+      console.log('[ClaudeChat] System info fetch result:', result);
+      if (result.success && result.systemInfo) {
+        const info = {
+          model: result.systemInfo.model,
+          modelVersion: result.systemInfo.modelVersion,
+          apiVersion: result.systemInfo.apiVersion,
+          claudeSessionId: result.systemInfo.claudeSessionId
+        };
+        console.log('[ClaudeChat] Setting system info from DB:', info);
+        setSystemInfo(info);
+      }
+    }).catch(err => {
+      console.error('[ClaudeChat] Error fetching system info:', err);
+    });
+
+    // Also listen for real-time updates
+    const unsubscribe = window.electron.on('claude:system-info', (data) => {
+      console.log('[ClaudeChat] Received claude:system-info event:', data);
+      if (data.sessionId === sessionId) {
+        const info = {
+          model: data.model,
+          modelVersion: data.modelVersion,
+          apiVersion: data.apiVersion,
+          claudeSessionId: data.claudeSessionId
+        };
+        console.log('[ClaudeChat] Setting system info from event:', info);
+        setSystemInfo(info);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [sessionId, isReadOnly]);
+
+  // Auto-resize textarea
+  const autoResize = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+  }, []);
+
+  useEffect(() => {
+    autoResize();
+  }, [input, autoResize]);
+
+  const handleStopSession = useCallback(async () => {
+    await useSessionStore.getState().stopSession(sessionId);
+  }, [sessionId]);
 
   const handleSendMessage = async () => {
     if (!input.trim()) return;
     const userMessage = input;
     setInput('');
 
-    // In read-only mode, add the user message visually then trigger lazy resume
     if (isReadOnly && onLazyResume) {
-      setMessages(prev => [...prev, {
+      updateMessages(sessionId, prev => [...prev, {
         id: crypto.randomUUID(), role: 'user', type: 'text', text: userMessage
       }]);
       onLazyResume(userMessage);
       return;
     }
 
-    setMessages(prev => [...prev, {
+    updateMessages(sessionId, prev => [...prev, {
       id: crypto.randomUUID(), role: 'user', type: 'text', text: userMessage
     }]);
-    const result = await window.electron.invoke('claude:send-message', sessionId, userMessage);
+    const result = await sendMessage(sessionId, userMessage);
     if (!result.success) {
-      setMessages(prev => [...prev, {
+      updateMessages(sessionId, prev => [...prev, {
         id: crypto.randomUUID(), role: 'system', type: 'error',
         text: `Failed to send: ${result.error}`
       }]);
     }
   };
-
-  const [copiedId, setCopiedId] = useState(null);
-  const [selectedModel, setSelectedModel] = useState('sonnet');
-  const [thinkingEnabled, setThinkingEnabled] = useState(false);
-  const [showModelMenu, setShowModelMenu] = useState(false);
-  const modelMenuRef = useRef(null);
-
-  const models = [
-    { id: 'sonnet', label: 'Sonnet 4.5' },
-    { id: 'opus', label: 'Opus 4.6' },
-    { id: 'haiku', label: 'Haiku 4.5' },
-  ];
-
-  const selectedModelLabel = models.find(m => m.id === selectedModel)?.label || 'Sonnet 4.5';
-
-  // Close model menu on outside click
-  useEffect(() => {
-    if (!showModelMenu) return;
-    const handleClick = (e) => {
-      if (modelMenuRef.current && !modelMenuRef.current.contains(e.target)) {
-        setShowModelMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [showModelMenu]);
 
   const handleCopy = useCallback((text, msgId) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -276,18 +160,9 @@ function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onL
     });
   }, []);
 
-  const activePermission = permissionQueue[0] || null;
-
   const handlePermissionResponse = async (approved) => {
     if (!activePermission) return;
-    const result = await window.electron.invoke(
-      'claude:permission-respond',
-      activePermission.requestId,
-      approved
-    );
-    if (result.success) {
-      setPermissionQueue(prev => prev.slice(1));
-    }
+    await respondToPermission(sessionId, activePermission.requestId, approved);
   };
 
   const renderMessage = (msg, idx, nextMsg, prevMsg) => {
@@ -300,7 +175,6 @@ function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onL
             </div>
           );
         }
-        // Check if next message is a 'result' (turn cost) — render it inline as footer
         const hasCostFooter = nextMsg && nextMsg.type === 'result';
         return (
           <div key={msg.id || idx} className="chat-assistant-block">
@@ -331,6 +205,20 @@ function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onL
         );
 
       case 'tool_use':
+        if (msg.toolName === 'AskUserQuestion') {
+          return (
+            <AskUserQuestionBlock
+              key={msg.toolUseId || idx}
+              toolInput={msg.toolInput}
+              status={msg.status}
+              result={msg.result}
+              sessionId={sessionId}
+              onSubmit={() => handlePermissionResponse(true)}
+              onCancel={() => handlePermissionResponse(false)}
+              hasPermission={activePermission?.tool === 'AskUserQuestion'}
+            />
+          );
+        }
         return (
           <ToolUseBlock
             key={msg.toolUseId || idx}
@@ -344,7 +232,7 @@ function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onL
         );
 
       case 'tool_result':
-        return null; // Results are shown inside ToolUseBlock
+        return null;
 
       case 'thinking':
         return (
@@ -364,9 +252,7 @@ function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onL
         );
 
       case 'result':
-        // Skip if preceding assistant text already rendered this inline
         if (prevMsg?.type === 'text' && prevMsg?.role === 'assistant') return null;
-        // Standalone fallback (e.g. after tool groups with no trailing text)
         return (
           <div key={msg.id || idx} className="chat-response-footer" style={{ opacity: 1 }}>
             <div className="chat-response-meta">
@@ -391,7 +277,6 @@ function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onL
     }
   };
 
-  // Group consecutive tool_use messages for collapsed rendering
   const renderItems = useMemo(() => {
     const items = [];
     let toolGroup = [];
@@ -399,7 +284,6 @@ function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onL
     const flushToolGroup = () => {
       if (toolGroup.length === 0) return;
       if (toolGroup.length <= 2) {
-        // Small groups: render individually
         items.push(...toolGroup.map(t => ({ type: 'single', msg: t })));
       } else {
         items.push({ type: 'tool_group', tools: [...toolGroup] });
@@ -411,7 +295,6 @@ function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onL
       if (msg.type === 'tool_use') {
         toolGroup.push(msg);
       } else if (msg.type === 'tool_result') {
-        // Skip — results are attached to tool_use
         continue;
       } else {
         flushToolGroup();
@@ -422,14 +305,27 @@ function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onL
     return items;
   }, [messages]);
 
+  const showWelcome = !isReadOnly && messages.length === 0 && !isStreaming;
+
+  // Use actual model from system info if available, otherwise fall back to prop
+  const displayModel = systemInfo?.model || model;
+  const displayModelVersion = systemInfo?.modelVersion;
+
   return (
     <div className="claude-chat">
       <div className="chat-feed">
+        {showWelcome && (
+          <WelcomeBanner
+            model={displayModel}
+            modelVersion={displayModelVersion}
+            branchName={branchName}
+          />
+        )}
+
         {renderItems.map((item, idx) => {
           if (item.type === 'tool_group') {
             return <ToolCallGroup key={`tg-${idx}`} tools={item.tools} />;
           }
-          // Look ahead/behind for context
           const nextItem = renderItems[idx + 1];
           const prevItem = renderItems[idx - 1];
           const nextMsg = nextItem?.type === 'single' ? nextItem.msg : null;
@@ -437,36 +333,58 @@ function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onL
           return renderMessage(item.msg, idx, nextMsg, prevMsg);
         })}
 
-        {isStreaming && streamingMessage && (
-          <div className="chat-assistant-msg streaming">
-            <MarkdownRenderer content={streamingMessage} />
-            <span className="streaming-cursor" />
-          </div>
-        )}
+        {!isReadOnly && (() => {
+          const lastMsg = messages[messages.length - 1];
+          const lastNonResultMsg = [...messages].reverse().find(m => m.type !== 'result');
+          const hasActiveThinking = lastMsg?.type === 'thinking' && lastMsg?.isPartial;
+          const hasRunningTool = messages.some(m => m.type === 'tool_use' && m.status === 'running');
+          const lastUserMsg = lastNonResultMsg?.role === 'user';
+          const isWaitingForResponse = (lastUserMsg || isStreaming) && !activePermission;
 
-        {activePermission && (
-          <div className="chat-permission">
-            <PermissionPrompt
-              tool={activePermission.tool}
-              input={activePermission.input}
-              sessionId={activePermission.session_id}
-              toolUseId={activePermission.tool_use_id}
-              onApprove={() => handlePermissionResponse(true)}
-              onDeny={() => handlePermissionResponse(false)}
-            />
-          </div>
-        )}
+          // If we're waiting for a response (either streaming or just sent a message)
+          if (isWaitingForResponse) {
+            if (streamingMessage) {
+              // Text is streaming in — show it with cursor
+              return (
+                <div className="chat-assistant-msg streaming">
+                  <MarkdownRenderer content={streamingMessage} />
+                  <span className="streaming-cursor" />
+                </div>
+              );
+            }
+
+            if (hasActiveThinking || hasRunningTool) {
+              // Thinking or tool in progress — those blocks handle their own status
+              return null;
+            }
+
+            // Waiting for any response (initial or during permissions)
+            return <StreamLoader label="Waiting for response" />;
+          }
+
+          return null;
+        })()}
 
         <div ref={messagesEndRef} />
       </div>
 
+      {activePermission && activePermission.tool !== 'AskUserQuestion' && (
+        <PermissionPrompt
+          tool={activePermission.tool}
+          input={activePermission.input}
+          onApprove={() => handlePermissionResponse(true)}
+          onDeny={() => handlePermissionResponse(false)}
+        />
+      )}
+
       <div className="chat-input-area">
         <div className="chat-input-box">
           <textarea
+            ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              if (e.key === 'Enter' && !e.shiftKey && !e.metaKey) {
                 e.preventDefault();
                 handleSendMessage();
               }
@@ -476,50 +394,24 @@ function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onL
             rows={1}
           />
           <div className="chat-input-toolbar">
-            <div className="chat-input-toolbar-left">
-              <div className="model-selector" ref={modelMenuRef}>
-                <button
-                  className="model-selector-btn"
-                  onClick={() => setShowModelMenu(!showModelMenu)}
-                >
-                  <span>{selectedModelLabel}</span>
-                  <ChevronDown size={12} />
-                </button>
-                {showModelMenu && (
-                  <div className="model-selector-menu">
-                    {models.map(m => (
-                      <div
-                        key={m.id}
-                        className={`model-selector-item ${m.id === selectedModel ? 'active' : ''}`}
-                        onClick={() => { setSelectedModel(m.id); setShowModelMenu(false); }}
-                      >
-                        {m.label}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+            <div className="chat-input-toolbar-left" />
+            {isStreaming ? (
               <button
-                className={`input-icon-btn ${thinkingEnabled ? 'active' : ''}`}
-                onClick={() => setThinkingEnabled(!thinkingEnabled)}
-                title={thinkingEnabled ? 'Thinking enabled' : 'Enable thinking'}
+                className="chat-stop-btn"
+                onClick={handleStopSession}
+                title="Stop generating"
               >
-                <Lightbulb size={14} />
+                <Square size={12} />
               </button>
+            ) : (
               <button
-                className="input-icon-btn"
-                title="Attach file"
+                className="chat-send-btn"
+                onClick={handleSendMessage}
+                disabled={!input.trim()}
               >
-                <Paperclip size={14} />
+                <Send size={14} />
               </button>
-            </div>
-            <button
-              className="chat-send-btn"
-              onClick={handleSendMessage}
-              disabled={!input.trim() || isStreaming}
-            >
-              <Send size={14} />
-            </button>
+            )}
           </div>
         </div>
       </div>
@@ -527,13 +419,9 @@ function ClaudeChat({ sessionId, isReadOnly = false, initialMessages = null, onL
   );
 }
 
-// Get cached messages for a session (for persisting before stop/exit)
-ClaudeChat.getCache = (sessionId) => messageCache.get(sessionId) || [];
-
-// Pre-seed cache for a session (used for lazy resume transition)
-ClaudeChat.setCache = (sessionId, messages) => messageCache.set(sessionId, messages);
-
-// Clear cache entry when a session is fully stopped
-ClaudeChat.clearCache = (sessionId) => messageCache.delete(sessionId);
+// Backward compatibility statics (used by Dashboard for session close/exit)
+ClaudeChat.getCache = (sessionId) => useSessionStore.getState().getMessages(sessionId);
+ClaudeChat.setCache = (sessionId, messages) => useSessionStore.getState().setMessages(sessionId, messages);
+ClaudeChat.clearCache = (sessionId) => useSessionStore.getState().clearMessages(sessionId);
 
 export default ClaudeChat;

@@ -218,7 +218,7 @@ class File {
   /**
    * Get git status for all files in worktree
    * @param {string} worktreePath - worktree root path
-   * @returns {Object} { success: boolean, files?: Array<{path: string, status: string}>, error?: string }
+   * @returns {Object} { success: boolean, files?: Array<{path: string, status: string, additions?: number, deletions?: number}>, error?: string }
    */
   static getGitStatus(worktreePath) {
     try {
@@ -233,9 +233,9 @@ class File {
       }
 
       const files = output.split('\n').map(line => {
-        // Parse porcelain format: "XY filename"
+        // Parse porcelain format: "XY filename" where XY is 2-char status code followed by space
         const statusCode = line.substring(0, 2);
-        const filePath = line.substring(3);
+        const filePath = line.substring(2).trim(); // Skip status code, trim separator space
 
         // Map status codes to readable names
         let status = 'M'; // modified
@@ -252,6 +252,49 @@ class File {
           rawStatus: statusCode
         };
       });
+
+      // Get diff stats for all changed files (additions/deletions)
+      try {
+        const numstatOutput = execSync('git diff --numstat HEAD', {
+          cwd: worktreePath,
+          stdio: 'pipe',
+          encoding: 'utf-8'
+        }).trim();
+
+        const diffStats = {};
+        if (numstatOutput) {
+          numstatOutput.split('\n').forEach(line => {
+            const parts = line.split('\t');
+            if (parts.length >= 3) {
+              const additions = parts[0] === '-' ? 0 : parseInt(parts[0], 10);
+              const deletions = parts[1] === '-' ? 0 : parseInt(parts[1], 10);
+              const filePath = parts[2];
+              diffStats[filePath] = { additions, deletions };
+            }
+          });
+        }
+
+        // Merge diff stats into files
+        files.forEach(file => {
+          if (diffStats[file.path]) {
+            file.additions = diffStats[file.path].additions;
+            file.deletions = diffStats[file.path].deletions;
+          } else if (file.status === '?' || file.status === 'A') {
+            // For untracked/new files, count all lines as additions
+            try {
+              const fullPath = path.join(worktreePath, file.path);
+              const content = fs.readFileSync(fullPath, 'utf-8');
+              file.additions = content.split('\n').length;
+              file.deletions = 0;
+            } catch (err) {
+              // If we can't read the file, skip stats
+            }
+          }
+        });
+      } catch (diffError) {
+        // If diff stats fail, continue without them
+        console.warn('[File] Could not get diff stats:', diffError.message);
+      }
 
       return { success: true, files };
     } catch (error) {

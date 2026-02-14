@@ -20,7 +20,6 @@ function getDatabase() {
     // Run migrations
     runMigrations();
 
-    console.log('[Database] Connection established');
   }
   return db;
 }
@@ -84,8 +83,6 @@ function initializeSchema() {
       applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
-
-  console.log('[Database] Schema initialized');
 }
 
 /**
@@ -114,238 +111,223 @@ function markMigrationApplied(migrationName) {
  * Run database migrations
  */
 function runMigrations() {
-  console.log('[Database] Running migrations...');
-
   // Migration 0: Add active_worktree_id column to folders table (schema migration)
   const MIGRATION_ADD_WORKTREE_COLUMN = 'add_active_worktree_id_column';
 
   if (!hasMigrationRun(MIGRATION_ADD_WORKTREE_COLUMN)) {
-    console.log(`[Database] Running migration: ${MIGRATION_ADD_WORKTREE_COLUMN}`);
-
     try {
       // Check if column exists
       const tableInfo = db.pragma('table_info(folders)');
       const hasColumn = tableInfo.some(col => col.name === 'active_worktree_id');
 
       if (!hasColumn) {
-        console.log('[Database] Adding active_worktree_id column to folders table...');
         db.exec('ALTER TABLE folders ADD COLUMN active_worktree_id TEXT');
-        console.log('[Database] Column added successfully');
-      } else {
-        console.log('[Database] Column active_worktree_id already exists, skipping');
       }
 
       markMigrationApplied(MIGRATION_ADD_WORKTREE_COLUMN);
-      console.log(`[Database] Migration completed: ${MIGRATION_ADD_WORKTREE_COLUMN}`);
     } catch (error) {
       console.error(`[Database] Migration failed: ${MIGRATION_ADD_WORKTREE_COLUMN}`, error);
       // Don't mark as applied if it failed
       return; // Stop further migrations
     }
-  } else {
-    console.log(`[Database] Migration already applied: ${MIGRATION_ADD_WORKTREE_COLUMN}`);
   }
 
   // Migration 1: Fix worktree data after main repo detection fix (v2 - with schema fix)
   const MIGRATION_FIX_WORKTREES = 'fix_worktree_main_branch_detection_v2';
 
   if (!hasMigrationRun(MIGRATION_FIX_WORKTREES)) {
-    console.log(`[Database] Running migration: ${MIGRATION_FIX_WORKTREES}`);
-
     try {
       const Worktree = require('./models/Worktree');
 
       // Check if migration is needed (if there are any worktree entries)
       if (Worktree.needsMigration()) {
-        console.log('[Database] Existing worktree data found, running cleanup...');
         const result = Worktree.migrateAllFolders();
-        console.log(`[Database] Migration result: ${result.migratedCount} folders fixed, ${result.errorCount} errors`);
 
         // Only mark as applied if there were no errors
         if (result.errorCount === 0) {
           markMigrationApplied(MIGRATION_FIX_WORKTREES);
-          console.log(`[Database] Migration completed successfully: ${MIGRATION_FIX_WORKTREES}`);
         } else {
           console.error(`[Database] Migration had errors, will retry on next startup: ${MIGRATION_FIX_WORKTREES}`);
         }
       } else {
-        console.log('[Database] No worktree data found, skipping migration');
         markMigrationApplied(MIGRATION_FIX_WORKTREES);
-        console.log(`[Database] Migration completed: ${MIGRATION_FIX_WORKTREES}`);
       }
     } catch (error) {
       console.error(`[Database] Migration failed: ${MIGRATION_FIX_WORKTREES}`, error);
       // Don't mark as applied if it failed
     }
-  } else {
-    console.log(`[Database] Migration already applied: ${MIGRATION_FIX_WORKTREES}`);
   }
 
   // Migration 2: Add claude_session_id column to claude_sessions table
   const MIGRATION_ADD_CLAUDE_SESSION_ID = 'add_claude_session_id_to_claude_sessions';
 
   if (!hasMigrationRun(MIGRATION_ADD_CLAUDE_SESSION_ID)) {
-    console.log(`[Database] Running migration: ${MIGRATION_ADD_CLAUDE_SESSION_ID}`);
-
     try {
       const tableInfo = db.pragma('table_info(claude_sessions)');
       const hasColumn = tableInfo.some(col => col.name === 'claude_session_id');
 
       if (!hasColumn) {
-        console.log('[Database] Adding claude_session_id column to claude_sessions table...');
         db.exec('ALTER TABLE claude_sessions ADD COLUMN claude_session_id TEXT');
-        console.log('[Database] Column added successfully');
-      } else {
-        console.log('[Database] Column claude_session_id already exists, skipping');
       }
 
       markMigrationApplied(MIGRATION_ADD_CLAUDE_SESSION_ID);
-      console.log(`[Database] Migration completed: ${MIGRATION_ADD_CLAUDE_SESSION_ID}`);
     } catch (error) {
       console.error(`[Database] Migration failed: ${MIGRATION_ADD_CLAUDE_SESSION_ID}`, error);
     }
-  } else {
-    console.log(`[Database] Migration already applied: ${MIGRATION_ADD_CLAUDE_SESSION_ID}`);
   }
 
   // Migration 3: Add messages column to claude_sessions table
   const MIGRATION_ADD_MESSAGES = 'add_messages_to_claude_sessions';
 
   if (!hasMigrationRun(MIGRATION_ADD_MESSAGES)) {
-    console.log(`[Database] Running migration: ${MIGRATION_ADD_MESSAGES}`);
-
     try {
       const tableInfo = db.pragma('table_info(claude_sessions)');
       const hasColumn = tableInfo.some(col => col.name === 'messages');
 
       if (!hasColumn) {
-        console.log('[Database] Adding messages column to claude_sessions table...');
         db.exec('ALTER TABLE claude_sessions ADD COLUMN messages TEXT');
-        console.log('[Database] Column added successfully');
-      } else {
-        console.log('[Database] Column messages already exists, skipping');
       }
 
       markMigrationApplied(MIGRATION_ADD_MESSAGES);
-      console.log(`[Database] Migration completed: ${MIGRATION_ADD_MESSAGES}`);
     } catch (error) {
       console.error(`[Database] Migration failed: ${MIGRATION_ADD_MESSAGES}`, error);
     }
-  } else {
-    console.log(`[Database] Migration already applied: ${MIGRATION_ADD_MESSAGES}`);
   }
 
   // Migration 4: Add source column to claude_sessions table
   const MIGRATION_ADD_SOURCE = 'add_source_to_claude_sessions';
 
   if (!hasMigrationRun(MIGRATION_ADD_SOURCE)) {
-    console.log(`[Database] Running migration: ${MIGRATION_ADD_SOURCE}`);
-
     try {
       const tableInfo = db.pragma('table_info(claude_sessions)');
       const hasColumn = tableInfo.some(col => col.name === 'source');
 
       if (!hasColumn) {
-        console.log('[Database] Adding source column to claude_sessions table...');
         db.exec("ALTER TABLE claude_sessions ADD COLUMN source TEXT DEFAULT 'app'");
-        console.log('[Database] Column added successfully');
-      } else {
-        console.log('[Database] Column source already exists, skipping');
       }
 
       markMigrationApplied(MIGRATION_ADD_SOURCE);
-      console.log(`[Database] Migration completed: ${MIGRATION_ADD_SOURCE}`);
     } catch (error) {
       console.error(`[Database] Migration failed: ${MIGRATION_ADD_SOURCE}`, error);
     }
-  } else {
-    console.log(`[Database] Migration already applied: ${MIGRATION_ADD_SOURCE}`);
   }
 
   // Migration 5: Add name column to claude_sessions table
   const MIGRATION_ADD_NAME = 'add_name_to_claude_sessions';
 
   if (!hasMigrationRun(MIGRATION_ADD_NAME)) {
-    console.log(`[Database] Running migration: ${MIGRATION_ADD_NAME}`);
-
     try {
       const tableInfo = db.pragma('table_info(claude_sessions)');
       const hasColumn = tableInfo.some(col => col.name === 'name');
 
       if (!hasColumn) {
-        console.log('[Database] Adding name column to claude_sessions table...');
         db.exec("ALTER TABLE claude_sessions ADD COLUMN name TEXT DEFAULT 'New Session'");
-        console.log('[Database] Column added successfully');
-      } else {
-        console.log('[Database] Column name already exists, skipping');
       }
 
       markMigrationApplied(MIGRATION_ADD_NAME);
-      console.log(`[Database] Migration completed: ${MIGRATION_ADD_NAME}`);
     } catch (error) {
       console.error(`[Database] Migration failed: ${MIGRATION_ADD_NAME}`, error);
     }
-  } else {
-    console.log(`[Database] Migration already applied: ${MIGRATION_ADD_NAME}`);
   }
 
   // Migration 6: Add archived column to claude_sessions table
   const MIGRATION_ADD_ARCHIVED = 'add_archived_to_claude_sessions';
 
   if (!hasMigrationRun(MIGRATION_ADD_ARCHIVED)) {
-    console.log(`[Database] Running migration: ${MIGRATION_ADD_ARCHIVED}`);
-
     try {
       const tableInfo = db.pragma('table_info(claude_sessions)');
       const hasColumn = tableInfo.some(col => col.name === 'archived');
 
       if (!hasColumn) {
-        console.log('[Database] Adding archived column to claude_sessions table...');
         db.exec('ALTER TABLE claude_sessions ADD COLUMN archived INTEGER DEFAULT 0');
-        console.log('[Database] Column added successfully');
-      } else {
-        console.log('[Database] Column archived already exists, skipping');
       }
 
       markMigrationApplied(MIGRATION_ADD_ARCHIVED);
-      console.log(`[Database] Migration completed: ${MIGRATION_ADD_ARCHIVED}`);
     } catch (error) {
       console.error(`[Database] Migration failed: ${MIGRATION_ADD_ARCHIVED}`, error);
     }
-  } else {
-    console.log(`[Database] Migration already applied: ${MIGRATION_ADD_ARCHIVED}`);
   }
 
   // Migration 7: Add last_active_at column to claude_sessions table
   const MIGRATION_ADD_LAST_ACTIVE = 'add_last_active_at_to_claude_sessions';
 
   if (!hasMigrationRun(MIGRATION_ADD_LAST_ACTIVE)) {
-    console.log(`[Database] Running migration: ${MIGRATION_ADD_LAST_ACTIVE}`);
-
     try {
       const tableInfo = db.pragma('table_info(claude_sessions)');
       const hasColumn = tableInfo.some(col => col.name === 'last_active_at');
 
       if (!hasColumn) {
-        console.log('[Database] Adding last_active_at column to claude_sessions table...');
         db.exec('ALTER TABLE claude_sessions ADD COLUMN last_active_at DATETIME');
         // Backfill from created_at
         db.exec('UPDATE claude_sessions SET last_active_at = created_at WHERE last_active_at IS NULL');
-        console.log('[Database] Column added and backfilled successfully');
-      } else {
-        console.log('[Database] Column last_active_at already exists, skipping');
       }
 
       markMigrationApplied(MIGRATION_ADD_LAST_ACTIVE);
-      console.log(`[Database] Migration completed: ${MIGRATION_ADD_LAST_ACTIVE}`);
     } catch (error) {
       console.error(`[Database] Migration failed: ${MIGRATION_ADD_LAST_ACTIVE}`, error);
     }
-  } else {
-    console.log(`[Database] Migration already applied: ${MIGRATION_ADD_LAST_ACTIVE}`);
   }
 
-  console.log('[Database] Migrations complete');
+  // Migration 8: Deduplicate archived sessions (keep most recent per claude_session_id per worktree)
+  const MIGRATION_DEDUP_ARCHIVED = 'deduplicate_archived_sessions';
+
+  if (!hasMigrationRun(MIGRATION_DEDUP_ARCHIVED)) {
+    try {
+      // Delete duplicate archived rows, keeping only the most recent per claude_session_id + worktree_id
+      db.exec(`
+        DELETE FROM claude_sessions
+        WHERE rowid NOT IN (
+          SELECT rowid FROM (
+            SELECT rowid, ROW_NUMBER() OVER (
+              PARTITION BY claude_session_id, worktree_id
+              ORDER BY COALESCE(last_active_at, created_at) DESC
+            ) as rn
+            FROM claude_sessions
+            WHERE archived = 1 AND claude_session_id IS NOT NULL
+          ) WHERE rn = 1
+        )
+        AND archived = 1
+        AND claude_session_id IS NOT NULL
+      `);
+
+      // Also set default name on existing sessions that have NULL name
+      db.exec("UPDATE claude_sessions SET name = 'New Session' WHERE name IS NULL");
+
+      markMigrationApplied(MIGRATION_DEDUP_ARCHIVED);
+    } catch (error) {
+      console.error(`[Database] Migration failed: ${MIGRATION_DEDUP_ARCHIVED}`, error);
+    }
+  }
+
+  // Migration 9: Add model metadata columns to claude_sessions table
+  const MIGRATION_ADD_MODEL_METADATA = 'add_model_metadata_to_claude_sessions';
+
+  if (!hasMigrationRun(MIGRATION_ADD_MODEL_METADATA)) {
+    try {
+      const tableInfo = db.pragma('table_info(claude_sessions)');
+      const hasModel = tableInfo.some(col => col.name === 'model');
+      const hasModelVersion = tableInfo.some(col => col.name === 'model_version');
+      const hasApiVersion = tableInfo.some(col => col.name === 'api_version');
+      const hasSystemMetadata = tableInfo.some(col => col.name === 'system_metadata');
+
+      if (!hasModel) {
+        db.exec('ALTER TABLE claude_sessions ADD COLUMN model TEXT');
+      }
+      if (!hasModelVersion) {
+        db.exec('ALTER TABLE claude_sessions ADD COLUMN model_version TEXT');
+      }
+      if (!hasApiVersion) {
+        db.exec('ALTER TABLE claude_sessions ADD COLUMN api_version TEXT');
+      }
+      if (!hasSystemMetadata) {
+        db.exec('ALTER TABLE claude_sessions ADD COLUMN system_metadata TEXT');
+      }
+
+      markMigrationApplied(MIGRATION_ADD_MODEL_METADATA);
+    } catch (error) {
+      console.error(`[Database] Migration failed: ${MIGRATION_ADD_MODEL_METADATA}`, error);
+    }
+  }
 }
 
 /**
@@ -355,7 +337,6 @@ function closeDatabase() {
   if (db) {
     db.close();
     db = null;
-    console.log('[Database] Connection closed');
   }
 }
 

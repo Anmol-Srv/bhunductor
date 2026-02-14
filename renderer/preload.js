@@ -14,13 +14,8 @@ const ALLOWED_CHANNELS = [
   'worktree:create',
   'worktree:delete',
   'worktree:validate-name',
-  'worktree:get-active-path',
   'worktree:set-active',
   'worktree:cleanup',
-  'file:tree-get',
-  'file:read-content',
-  'file:get-git-diff',
-  'file:get-git-status',
   'claude:session-start',
   'claude:session-stop',
   'claude:session-delete',
@@ -34,17 +29,25 @@ const ALLOWED_CHANNELS = [
   'claude:session-exited',
   'claude:conversation-history',
   'claude:session-get-history',
+  'claude:session-get-system-info',
   'claude:session-save-messages',
   'claude:tool-use',
   'claude:tool-result',
   'claude:thinking',
   'claude:turn-complete',
+  'claude:system-info',
   'claude:session-title-updated',
+  'claude:session-rename',
   'claude:session-archive',
   'claude:session-unarchive',
   'claude:session-list-archived',
   'claude:session-get-last',
   'claude:session-lazy-resume',
+  'claude:session-check-alive',
+  'file:tree-get',
+  'file:read-content',
+  'file:get-git-diff',
+  'file:get-git-status',
   'app:get-version',
   'app:quit'
 ];
@@ -85,5 +88,3 @@ contextBridge.exposeInMainWorld('electron', {
    */
   platform: process.platform
 });
-
-console.log('[Preload] Secure IPC bridge initialized');

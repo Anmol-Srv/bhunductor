@@ -30,11 +30,9 @@ class ConfigManager {
       if (fs.existsSync(this.configPath)) {
         const data = fs.readFileSync(this.configPath, 'utf8');
         this.config = { ...DEFAULT_CONFIG, ...JSON.parse(data) };
-        console.log('[Config] Loaded existing config');
       } else {
         this.config = DEFAULT_CONFIG;
         this.save();
-        console.log('[Config] Created default config');
       }
     } catch (error) {
       console.error('[Config] Error loading config:', error);
@@ -52,7 +50,6 @@ class ConfigManager {
         JSON.stringify(this.config, null, 2),
         'utf8'
       );
-      console.log('[Config] Saved config');
     } catch (error) {
       console.error('[Config] Error saving config:', error);
     }

@@ -34,6 +34,19 @@ class PermissionHttpServer {
       }
     }, (request, reply) => this.handlePermissionRequest(request, reply));
 
+    this.fastify.post('/rename-session', {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['session_id', 'title'],
+          properties: {
+            session_id: { type: 'string' },
+            title: { type: 'string' }
+          }
+        }
+      }
+    }, (request, reply) => this.handleRenameSession(request, reply));
+
     this.fastify.setNotFoundHandler((request, reply) => {
       reply.code(404).send({ error: 'Not found' });
     });
@@ -46,18 +59,19 @@ class PermissionHttpServer {
       reply.code(500).send({ error: error.message, approved: false });
     });
 
-    return this.fastify.listen({ port: this.port, host: 'localhost' });
+    return this.fastify.listen({ port: this.port, host: 'localhost' }).then((address) => {
+      this.actualPort = this.fastify.server.address().port;
+      return address;
+    });
+  }
+
+  getPort() {
+    return this.actualPort || this.port;
   }
 
   async handlePermissionRequest(request, reply) {
     const permissionData = request.body;
     const requestId = permissionData.tool_use_id;
-
-    console.log('[PermissionHttpServer] received permission request:', {
-      requestId,
-      tool: permissionData.tool,
-      sessionId: permissionData.session_id
-    });
 
     if (this.onPermissionRequest) {
       this.onPermissionRequest(requestId, permissionData);
@@ -78,6 +92,23 @@ class PermissionHttpServer {
     return result;
   }
 
+  async handleRenameSession(request, reply) {
+    const { session_id, title } = request.body;
+
+    if (this.onRenameSession) {
+      try {
+        await this.onRenameSession(session_id, title);
+        return { success: true };
+      } catch (error) {
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    } else {
+      reply.code(503);
+      return { success: false, error: 'Rename handler not configured' };
+    }
+  }
+
   respondToPermission(requestId, approved, message) {
     const pending = this.pendingRequests.get(requestId);
 
@@ -88,12 +119,6 @@ class PermissionHttpServer {
       });
       return false;
     }
-
-    console.log('[PermissionHttpServer] responding to MCP with decision:', {
-      requestId,
-      approved,
-      message
-    });
 
     clearTimeout(pending.timeoutId);
     this.pendingRequests.delete(requestId);

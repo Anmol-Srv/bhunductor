@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PanelLeftClose, PanelLeft, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import BranchItem from './BranchItem';
 
 function Sidebar({
@@ -37,9 +37,6 @@ function Sidebar({
               >
                 <Plus size={16} />
               </button>
-              <button className="collapse-btn" onClick={onToggle}>
-                <PanelLeftClose size={16} />
-              </button>
             </div>
             </div>
 
@@ -69,13 +66,6 @@ function Sidebar({
         </div>
       )}
 
-      {collapsed && (
-        <div className="sidebar-collapsed">
-          <button className="expand-btn" onClick={onToggle} title="Expand sidebar">
-            <PanelLeft size={16} />
-          </button>
-        </div>
-      )}
     </div>
   );
 }
