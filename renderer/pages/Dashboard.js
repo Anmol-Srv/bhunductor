@@ -1,155 +1,58 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import MainContent from '../components/MainContent';
-import RightPanel from '../components/RightPanel';
 import CreateBranchModal from '../components/CreateBranchModal';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
-import ClaudeChat from '../components/claude/ClaudeChat';
+import FilePanel from '../components/FilePanel';
+import useBranchStore from '../stores/branchStore';
+import useSessionStore from '../stores/sessionStore';
+import useUIStore from '../stores/uiStore';
+
+const EMPTY_ARRAY = [];
 
 function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoForward }) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [worktrees, setWorktrees] = useState([]);
-  const [activeWorktree, setActiveWorktree] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [loading, setLoading] = useState(true);
 
-  // New session state model
-  const [sessionsByWorktree, setSessionsByWorktree] = useState({}); // { worktreeId: [session, ...] }
-  const [openTabs, setOpenTabs] = useState([]); // [{ sessionId, worktreeId, branchName }]
-  const [activeTabId, setActiveTabId] = useState(null); // sessionId of active tab
+  const { worktrees, activeWorktree, loading, initialize, loadWorktrees, createBranch, deleteBranch, selectBranch } = useBranchStore();
+  const { loadAllSessions, loadArchivedSessions, startSession, deleteSession, archiveSession, unarchiveAndResume, lazyResume, loadLastSession, pendingResumeSession, clearPendingResumeSession, sessionsByWorktree, archivedSessionsByWorktree, getMessages, setMessages, saveMessages, clearMessages } = useSessionStore();
+  const { setActiveFolder, openTab, closeTab, switchTab, sidebarCollapsed, toggleSidebar, filePanelCollapsed, toggleFilePanel } = useUIStore();
 
-  // Load worktrees on mount and when folder changes
+  // Subscribe to folder-specific tabs with shallow comparison to prevent infinite loops
+  const { openTabs, activeTabId } = useUIStore(
+    useShallow(state => {
+      const folderId = state.activeFolderId;
+      return {
+        openTabs: folderId ? (state.tabsByFolder[folderId] || EMPTY_ARRAY) : EMPTY_ARRAY,
+        activeTabId: folderId ? (state.activeTabByFolder[folderId] || null) : null
+      };
+    })
+  );
+
+  // Initialize worktrees and load sessions on mount
   useEffect(() => {
-    if (folder) {
-      initializeWorktrees();
-    }
-  }, [folder]);
+    if (!folder) return;
 
-  // Listen for session-exited events
-  useEffect(() => {
-    const unsubscribe = window.electron.on('claude:session-exited', (data) => {
-      const { sessionId } = data;
+    // Set this folder as active in UI store (switches tab context)
+    setActiveFolder(folder.id);
 
-      // Persist messages to DB before clearing cache
-      const cachedMessages = ClaudeChat.getCache(sessionId);
-      if (cachedMessages.length > 0) {
-        window.electron.invoke('claude:session-save-messages', sessionId, cachedMessages).catch(() => {});
-      }
-
-      // Clear message cache for dead session
-      ClaudeChat.clearCache(sessionId);
-
-      // Update session status in sessionsByWorktree (keep it, mark as exited)
-      setSessionsByWorktree(prev => {
-        const next = { ...prev };
-        for (const wtId of Object.keys(next)) {
-          next[wtId] = next[wtId].map(s =>
-            (s.sessionId || s.id) === sessionId
-              ? { ...s, status: 'exited' }
-              : s
-          );
-        }
-        return next;
-      });
-
-      // Remove from openTabs if present
-      setOpenTabs(prev => {
-        const filtered = prev.filter(t => t.sessionId !== sessionId);
-        if (filtered.length !== prev.length) {
-          // Active tab was removed - switch to adjacent
-          setActiveTabId(currentActive => {
-            if (currentActive === sessionId) {
-              const oldIdx = prev.findIndex(t => t.sessionId === sessionId);
-              const newTab = filtered[Math.min(oldIdx, filtered.length - 1)];
-              return newTab?.sessionId || null;
-            }
-            return currentActive;
-          });
-        }
-        return filtered;
-      });
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const initializeWorktrees = async () => {
-    setLoading(true);
-    try {
-      await window.electron.invoke('worktree:init-main', folder.id, folder.path);
-      const result = await window.electron.invoke('worktree:list', folder.id);
-
-      if (result.success) {
-        setWorktrees(result.worktrees);
-
-        const active = result.worktrees.find(w => w.id === folder.active_worktree_id)
-          || result.worktrees.find(w => w.is_main === 1);
-        setActiveWorktree(active);
-
-        // Load sessions for all worktrees
-        const sessMap = await loadAllSessions(result.worktrees);
-
-        // Auto-restore: start a --continue session for the active worktree
-        // if there's a previous session with a claude_session_id
-        if (active) {
-          const worktreeSessions = sessMap[active.id] || [];
-          const restorable = worktreeSessions.find(s => s.claude_session_id);
-          if (restorable) {
-            try {
-              const startResult = await window.electron.invoke(
-                'claude:session-start', folder.id, active.id
-              );
-              if (startResult.success) {
-                const session = startResult.session;
-                sessMap[active.id] = [...worktreeSessions, session];
-                setSessionsByWorktree({ ...sessMap });
-                setOpenTabs([{
-                  sessionId: session.sessionId,
-                  worktreeId: active.id,
-                  branchName: active.branch_name
-                }]);
-                setActiveTabId(session.sessionId);
-              }
-            } catch (err) {
-              console.error('Auto-restore session failed:', err);
-            }
-          }
+    (async () => {
+      const result = await initialize(folder);
+      if (result) {
+        await loadAllSessions(folder.id, result.worktrees);
+        if (result.activeWorktree) {
+          await loadLastSession(folder.id, result.activeWorktree.id, result.activeWorktree.branch_name);
         }
       }
-    } catch (error) {
-      console.error('Error initializing worktrees:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadAllSessions = async (worktreeList) => {
-    const sessMap = {};
-    for (const wt of worktreeList) {
-      const result = await window.electron.invoke('claude:session-list', folder.id, wt.id);
-      sessMap[wt.id] = result.success ? result.sessions : [];
-    }
-    setSessionsByWorktree(sessMap);
-    return sessMap;
-  };
+    })();
+  }, [folder, setActiveFolder]);
 
   const handleCreateBranch = async (branchName) => {
-    try {
-      const result = await window.electron.invoke('worktree:create', folder.id, folder.path, branchName);
-
-      if (!result.success) {
-        alert(`Failed to create branch: ${result.error}`);
-        return;
-      }
-
-      await loadWorktrees();
-      setActiveWorktree(result.worktree);
-      await window.electron.invoke('worktree:set-active', folder.id, result.worktree.id);
-    } catch (error) {
-      console.error('Error creating branch:', error);
-      alert('Unexpected error creating branch');
+    const result = await createBranch(folder.id, folder.path, branchName);
+    if (!result.success) {
+      alert(`Failed to create branch: ${result.error}`);
     }
   };
 
@@ -158,193 +61,208 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
   };
 
   const confirmDelete = async () => {
-    try {
-      const result = await window.electron.invoke('worktree:delete', deleteConfirm.id);
-
-      if (!result.success) {
-        alert(`Failed to delete branch: ${result.error}`);
-        return;
-      }
-
-      await loadWorktrees();
-
-      if (activeWorktree?.id === deleteConfirm.id) {
-        const mainBranch = worktrees.find(w => w.is_main === 1);
-        setActiveWorktree(mainBranch);
-        if (mainBranch) {
-          await window.electron.invoke('worktree:set-active', folder.id, mainBranch.id);
-        }
-      }
-    } catch (error) {
-      console.error('Error deleting branch:', error);
-      alert('Unexpected error deleting branch');
-    } finally {
-      setDeleteConfirm(null);
+    const result = await deleteBranch(deleteConfirm.id, folder.id);
+    if (!result.success) {
+      alert(`Failed to delete branch: ${result.error}`);
     }
-  };
-
-  const loadWorktrees = async () => {
-    const result = await window.electron.invoke('worktree:list', folder.id);
-    if (result.success) {
-      setWorktrees(result.worktrees);
-      await loadAllSessions(result.worktrees);
-    }
+    setDeleteConfirm(null);
   };
 
   const handleSelectBranch = async (worktree) => {
-    setActiveWorktree(worktree);
-    await window.electron.invoke('worktree:set-active', folder.id, worktree.id);
-  };
-
-  const toggleSidebar = () => {
-    setSidebarCollapsed(!sidebarCollapsed);
+    await selectBranch(folder.id, worktree);
   };
 
   const handleStartSession = useCallback(async (worktreeId, claudeSessionId = null) => {
     const targetWorktree = worktrees.find(w => w.id === worktreeId);
-    if (!targetWorktree) {
-      console.error('Worktree not found:', worktreeId);
-      return;
-    }
+    if (!targetWorktree) return;
 
-    // Switch to target worktree if not already active
     if (activeWorktree?.id !== worktreeId) {
-      setActiveWorktree(targetWorktree);
-      await window.electron.invoke('worktree:set-active', folder.id, worktreeId);
+      await selectBranch(folder.id, targetWorktree);
     }
 
-    const result = await window.electron.invoke('claude:session-start', folder.id, worktreeId, claudeSessionId);
+    // Clear pending resume for this worktree
+    const pending = useSessionStore.getState().pendingResumeSession;
+    if (pending?.worktreeId === worktreeId) {
+      clearPendingResumeSession();
+    }
 
+    const result = await startSession(folder.id, worktreeId, claudeSessionId);
     if (result.success) {
       const session = result.session;
-      const deletedIds = result.deletedSessionIds || [];
-
-      // Add to sessionsByWorktree, removing any old entries that were deleted on resume
-      setSessionsByWorktree(prev => {
-        const existing = prev[worktreeId] || [];
-        const filtered = deletedIds.length > 0
-          ? existing.filter(s => !deletedIds.includes(s.sessionId || s.id))
-          : existing;
-        return { ...prev, [worktreeId]: [...filtered, session] };
-      });
-
-      // Add to openTabs and set as active
-      const newTab = {
+      openTab({
         sessionId: session.sessionId,
         worktreeId,
-        branchName: targetWorktree.branch_name
-      };
-      setOpenTabs(prev => [...prev, newTab]);
-      setActiveTabId(session.sessionId);
+        branchName: targetWorktree.branch_name,
+        folderName: folder.name,
+        model: 'Opus 4.6',
+        title: session.title || session.name || null
+      });
+      return session;
     } else {
-      console.error('Failed to start session:', result.error);
       alert(`Failed to start Claude session: ${result.error}`);
     }
   }, [worktrees, activeWorktree, folder]);
 
   const handleOpenSession = useCallback(async (sessionId, worktreeId, branchName) => {
-    // Check if already open as a tab
-    const existing = openTabs.find(t => t.sessionId === sessionId);
-    if (existing) {
-      setActiveTabId(sessionId);
+    // Already open as tab?
+    if (useUIStore.getState().isTabOpen(sessionId)) {
+      switchTab(sessionId);
       return;
     }
 
-    // Check if this session is still active (has a running process)
     const sessions = sessionsByWorktree[worktreeId] || [];
     const session = sessions.find(s => (s.sessionId || s.id) === sessionId);
 
     if (session && session.status !== 'active') {
-      // Past session — resume it by starting a new process with --resume
-      const oldSessionId = session.sessionId || session.id;
+      // Resume past session
       await handleStartSession(worktreeId, session.claude_session_id);
-      // Remove the old inactive entry if backend didn't delete it (e.g. no claude_session_id)
-      setSessionsByWorktree(prev => {
-        const list = prev[worktreeId] || [];
-        const alreadyRemoved = !list.some(s => (s.sessionId || s.id) === oldSessionId);
-        if (alreadyRemoved) return prev;
-        return { ...prev, [worktreeId]: list.filter(s => (s.sessionId || s.id) !== oldSessionId) };
-      });
       return;
     }
 
-    // Active session — just open its tab
-    const newTab = { sessionId, worktreeId, branchName };
-    setOpenTabs(prev => [...prev, newTab]);
-    setActiveTabId(sessionId);
-  }, [openTabs, sessionsByWorktree, handleStartSession]);
+    // Active session — pre-seed cache from DB if empty
+    const cachedMessages = getMessages(sessionId);
+    if (cachedMessages.length === 0 && session?.messages) {
+      try {
+        const parsed = JSON.parse(session.messages);
+        if (parsed.length > 0) setMessages(sessionId, parsed);
+      } catch {}
+    }
+    openTab({
+      sessionId,
+      worktreeId,
+      branchName,
+      folderName: folder.name,
+      model: 'Opus 4.6',
+      title: session?.title || session?.name || null
+    });
+  }, [sessionsByWorktree, handleStartSession]);
 
   const handleDeleteSession = useCallback(async (sessionId, worktreeId) => {
-    const result = await window.electron.invoke('claude:session-delete', sessionId);
-    if (result.success) {
-      // Remove from sessionsByWorktree
-      setSessionsByWorktree(prev => {
-        const list = prev[worktreeId] || [];
-        return { ...prev, [worktreeId]: list.filter(s => (s.sessionId || s.id) !== sessionId) };
-      });
-      // Remove from openTabs if present
-      setOpenTabs(prev => {
-        const filtered = prev.filter(t => t.sessionId !== sessionId);
-        if (filtered.length !== prev.length) {
-          setActiveTabId(currentActive => {
-            if (currentActive === sessionId) {
-              const oldIdx = prev.findIndex(t => t.sessionId === sessionId);
-              const newTab = filtered[Math.min(oldIdx, filtered.length - 1)];
-              return newTab?.sessionId || null;
-            }
-            return currentActive;
-          });
-        }
-        return filtered;
-      });
-    }
-  }, []);
-
-  const handleSwitchTab = useCallback((sessionId) => {
-    setActiveTabId(sessionId);
+    await deleteSession(sessionId, worktreeId);
+    closeTab(sessionId);
   }, []);
 
   const handleCloseTab = useCallback((sessionId, shouldStop) => {
-    // Persist messages to DB before closing
-    const cachedMessages = ClaudeChat.getCache(sessionId);
-    if (cachedMessages.length > 0) {
-      window.electron.invoke('claude:session-save-messages', sessionId, cachedMessages).catch(() => {});
+    // Special case: closing pending resume session
+    if (sessionId === null) {
+      clearPendingResumeSession();
+      return;
     }
+
+    saveMessages(sessionId);
 
     if (shouldStop) {
-      ClaudeChat.clearCache(sessionId);
-      window.electron.invoke('claude:session-stop', sessionId).then(result => {
-        if (result.success) {
-          // Mark session as stopped in sessionsByWorktree (keep it visible)
-          setSessionsByWorktree(prev => {
-            const next = { ...prev };
-            for (const wtId of Object.keys(next)) {
-              next[wtId] = next[wtId].map(s =>
-                (s.sessionId || s.id) === sessionId
-                  ? { ...s, status: 'stopped' }
-                  : s
-              );
-            }
-            return next;
-          });
+      clearMessages(sessionId);
+      useSessionStore.getState().stopSession(sessionId);
+    }
+    closeTab(sessionId);
+  }, []);
+
+  // Global keyboard shortcuts (must be after handler definitions)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const isMeta = e.metaKey || e.ctrlKey;
+
+      // Escape — close modals
+      if (e.key === 'Escape') {
+        if (showCreateModal) { setShowCreateModal(false); return; }
+        if (deleteConfirm) { setDeleteConfirm(null); return; }
+      }
+
+      // Cmd+N — new session on active worktree
+      if (isMeta && e.key === 'n') {
+        e.preventDefault();
+        if (activeWorktree) {
+          handleStartSession(activeWorktree.id);
         }
+        return;
+      }
+
+      // Cmd+W — close active tab or pending resume
+      if (isMeta && e.key === 'w') {
+        e.preventDefault();
+        if (activeTabId) {
+          handleCloseTab(activeTabId, false);
+        } else if (pendingResumeSession) {
+          handleCloseTab(null, false);
+        }
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showCreateModal, deleteConfirm, activeWorktree, activeTabId, pendingResumeSession, handleStartSession, handleCloseTab]);
+
+  const handleLazyResume = useCallback(async (message) => {
+    const pending = useSessionStore.getState().pendingResumeSession;
+    if (!pending) return;
+
+    const result = await lazyResume(
+      folder.id, pending.worktreeId, pending.claudeSessionId,
+      message, pending.messages, pending.branchName, pending.title
+    );
+    if (result.success) {
+      const session = result.session;
+      const targetWorktree = worktrees.find(w => w.id === pending.worktreeId);
+      openTab({
+        sessionId: session.sessionId,
+        worktreeId: pending.worktreeId,
+        branchName: targetWorktree?.branch_name || pending.branchName,
+        folderName: folder.name,
+        model: 'Opus 4.6',
+        title: pending.title || session.title || session.name || null
       });
     }
+  }, [folder, worktrees]);
 
-    // Remove tab
-    setOpenTabs(prev => {
-      const filtered = prev.filter(t => t.sessionId !== sessionId);
-      setActiveTabId(currentActive => {
-        if (currentActive === sessionId) {
-          const oldIdx = prev.findIndex(t => t.sessionId === sessionId);
-          const newTab = filtered[Math.min(oldIdx, filtered.length - 1)];
-          return newTab?.sessionId || null;
-        }
-        return currentActive;
+  const handleArchiveSession = useCallback(async (sessionId, worktreeId) => {
+    await archiveSession(sessionId, worktreeId, folder.id);
+  }, [folder]);
+
+  const handleUnarchiveAndResume = useCallback(async (sessionId, worktreeId, branchName, claudeSessionId) => {
+    const targetWorktree = worktrees.find(w => w.id === worktreeId);
+    if (activeWorktree?.id !== worktreeId && targetWorktree) {
+      await selectBranch(folder.id, targetWorktree);
+    }
+    const result = await unarchiveAndResume(sessionId, worktreeId, claudeSessionId, folder.id);
+    if (result?.success) {
+      const session = result.session;
+      openTab({
+        sessionId: session.sessionId,
+        worktreeId,
+        branchName,
+        folderName: folder.name,
+        model: 'Opus 4.6',
+        title: session.title || session.name || null
       });
-      return filtered;
+    }
+  }, [folder, worktrees, activeWorktree]);
+
+  const handleLoadArchived = useCallback(async (worktreeId) => {
+    await loadArchivedSessions(folder.id, worktreeId);
+  }, [folder]);
+
+  const handleOpenFile = useCallback((fileInfo) => {
+    const tabId = fileInfo.filePath;
+    if (useUIStore.getState().isTabOpen(tabId)) {
+      switchTab(tabId);
+      return;
+    }
+    openTab({
+      id: tabId,
+      type: 'file',
+      filePath: fileInfo.filePath,
+      relativePath: fileInfo.relativePath,
+      fileName: fileInfo.fileName,
+      worktreeId: activeWorktree?.id,
+      folderId: folder.id,
+      hasChanges: fileInfo.hasChanges,
+      changeType: fileInfo.changeType,
+      viewMode: fileInfo.viewMode,
+      title: fileInfo.fileName
     });
-  }, []);
+  }, [folder, activeWorktree]);
 
   return (
     <div className="dashboard">
@@ -370,18 +288,30 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
           onStartSession={handleStartSession}
           onOpenSession={handleOpenSession}
           onDeleteSession={handleDeleteSession}
+          onArchiveSession={handleArchiveSession}
+          onUnarchiveAndResume={handleUnarchiveAndResume}
+          onLoadArchivedSessions={handleLoadArchived}
           sessionsByWorktree={sessionsByWorktree}
+          archivedSessionsByWorktree={archivedSessionsByWorktree}
           openTabs={openTabs}
         />
 
         <MainContent
           openTabs={openTabs}
           activeTabId={activeTabId}
-          onSwitchTab={handleSwitchTab}
+          onSwitchTab={switchTab}
           onCloseTab={handleCloseTab}
+          pendingResumeSession={pendingResumeSession}
+          onLazyResume={handleLazyResume}
         />
 
-        <RightPanel />
+        <FilePanel
+          collapsed={filePanelCollapsed}
+          onToggle={toggleFilePanel}
+          folderId={folder.id}
+          worktreeId={activeWorktree?.id}
+          onOpenFile={handleOpenFile}
+        />
       </div>
 
       <CreateBranchModal

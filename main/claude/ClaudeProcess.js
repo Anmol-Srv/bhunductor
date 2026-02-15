@@ -1,32 +1,96 @@
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
+const { execSync } = require('child_process');
+
+const SIGKILL_TIMEOUT_MS = 3000;
+const REPLAY_SAFETY_TIMEOUT_MS = 5000;
+
+/**
+ * Resolve the full path to the `claude` binary.
+ * Electron apps launched from macOS Finder may have a stripped PATH,
+ * so we resolve once using a login shell.
+ */
+let resolvedClaudePath = null;
+function getClaudePath() {
+  if (resolvedClaudePath) return resolvedClaudePath;
+  const candidates = [
+    path.join(os.homedir(), '.local', 'bin', 'claude'),
+    '/usr/local/bin/claude',
+    '/opt/homebrew/bin/claude'
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      resolvedClaudePath = p;
+      return p;
+    }
+  }
+  try {
+    resolvedClaudePath = execSync('which claude', {
+      shell: process.env.SHELL || '/bin/zsh',
+      env: { ...process.env, HOME: os.homedir() }
+    }).toString().trim();
+    return resolvedClaudePath;
+  } catch {
+    return 'claude';
+  }
+}
+
+/**
+ * Validate that the Claude CLI is installed and return version info.
+ * @returns {{ available: boolean, path: string|null, version: string|null, error: string|null }}
+ */
+function validateCLI() {
+  const claudeBin = getClaudePath();
+  if (claudeBin === 'claude') {
+    return { available: false, path: null, version: null, error: 'Claude CLI not found in any known location' };
+  }
+  try {
+    const version = execSync(`"${claudeBin}" --version`, {
+      stdio: 'pipe',
+      encoding: 'utf-8',
+      timeout: 5000
+    }).trim();
+    return { available: true, path: claudeBin, version, error: null };
+  } catch (err) {
+    return { available: true, path: claudeBin, version: null, error: `Failed to get version: ${err.message}` };
+  }
+}
 
 class ClaudeProcess {
   constructor(sessionId, workingDir, callbacks, options = {}) {
     this.sessionId = sessionId;
     this.workingDir = workingDir;
-    this.callbacks = callbacks; // { onChunk, onComplete, onError, onExit, onSystemInfo, onHistory }
-    this.options = options; // { resumeSessionId, continueSession }
+    this.callbacks = callbacks;
+    this.options = options;
     this.buffer = '';
     this.process = null;
-    this.currentContentBlock = null; // Track current content block for tool usage
+    this.currentContentBlock = null;
     this.claudeSessionId = null;
     this.isReplayingHistory = !!(options.resumeSessionId || options.continueSession);
     this.historyMessages = [];
-    this.replayTimer = null; // Debounce timer for end-of-replay detection
+    this.replayTimer = null;
+    this.mcpConfigPath = null;
+    this.hasStreamedContent = false;
+
+    // Tool use deduplication: track IDs forwarded via content_block_stop
+    this.forwardedToolUseIds = new Set();
+
+    // stdin backpressure: queue messages when stdin is full
+    this.stdinQueue = [];
+    this.stdinDraining = false;
+
+    // Process health: track last event time
+    this.lastEventTime = Date.now();
+
+    // stderr capture for error context
+    this.recentStderr = [];
   }
 
   start() {
-    // Spawn: claude --print --input-format stream-json --output-format stream-json
-    // Note: --output-format and --input-format only work with --print mode
-    // Using MCP server for permission handling via --permission-prompt-tool
-    // The MCP server communicates with Electron app via HTTP to show permission UI
-    // --verbose is required when using stream-json output format
-    const path = require('path');
-    const fs = require('fs');
-    const os = require('os');
-
     const permissionServerPath = path.join(__dirname, '../mcp/permission-server.js');
+    const permissionPort = String(this.options.permissionPort || 58472);
 
     const mcpConfig = {
       mcpServers: {
@@ -34,7 +98,7 @@ class ClaudeProcess {
           command: 'node',
           args: [permissionServerPath],
           env: {
-            ELECTRON_PERMISSION_PORT: '58472',
+            ELECTRON_PERMISSION_PORT: permissionPort,
             SESSION_ID: this.sessionId
           }
         }
@@ -44,15 +108,24 @@ class ClaudeProcess {
     const tempDir = os.tmpdir();
     const mcpConfigPath = path.join(tempDir, `bhunductor-mcp-${this.sessionId}.json`);
     fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
-
     this.mcpConfigPath = mcpConfigPath;
+
+    const systemPrompt = `IMPORTANT: You MUST call the rename_session tool immediately after the user's first message, before providing any other response. Generate a concise, descriptive title (max 80 characters) that summarizes what the user is asking about or trying to accomplish. This is required for session organization.
+
+Example flow:
+User: "Help me debug this React component"
+You: [call rename_session with title "Debug React Component"] then provide your response
+
+Always call rename_session first, then continue with your normal response.`;
 
     const args = [
       '--print',
       '--input-format', 'stream-json',
       '--output-format', 'stream-json',
+      // '--model', 'haiku',
       '--mcp-config', mcpConfigPath,
       '--permission-prompt-tool', 'mcp__bhunductor-permissions__request_permission',
+      '--append-system-prompt', systemPrompt,
       '--verbose'
     ];
 
@@ -60,41 +133,67 @@ class ClaudeProcess {
       args.push('--resume', this.options.resumeSessionId);
     } else if (this.options.continueSession) {
       args.push('--continue');
+    } else if (!this.options.skipSessionId) {
+      // Only pass --session-id for new sessions, not reactivated ones
+      args.push('--session-id', this.sessionId);
     }
+    // If skipSessionId is true, let CLI generate a fresh session ID
 
-    this.process = spawn('claude', args, {
+    const claudeBin = getClaudePath();
+    this.process = spawn(claudeBin, args, {
       cwd: this.workingDir,
-      stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         ...process.env,
-        ELECTRON_PERMISSION_PORT: '58472'
-      }
+        ELECTRON_PERMISSION_PORT: permissionPort
+      },
+      stdio: ['pipe', 'pipe', 'pipe'],
+      detached: true
     });
 
-    this.process.stdout.on('data', (chunk) => {
-      this.buffer += chunk.toString();
+    this.process.unref();
+
+    this.process.stdout.on('data', (data) => {
+      this.buffer += data.toString();
       this.processBuffer();
     });
 
     this.process.stderr.on('data', (data) => {
-      const errorMsg = data.toString();
-      console.log('[Claude CLI] stderr:', errorMsg.trim());
-      this.callbacks.onError({
-        sessionId: this.sessionId,
-        error: errorMsg
-      });
+      const text = data.toString().trim();
+      if (text) {
+        console.error('[Claude CLI stderr]', text);
+        // Keep last 5 stderr lines for error context
+        this.recentStderr.push(text);
+        if (this.recentStderr.length > 5) this.recentStderr.shift();
+      }
+    });
+
+    // Handle stdin errors (broken pipe, etc.)
+    this.process.stdin.on('error', (err) => {
+      console.error('[Claude CLI] stdin error:', err.message);
+    });
+
+    this.process.on('exit', (code, signal) => {
+      if (code !== 0 && code !== null) {
+        const stderrContext = this.recentStderr.length > 0
+          ? this.recentStderr.join('\n')
+          : 'No stderr output captured';
+        this.callbacks.onError({
+          sessionId: this.sessionId,
+          error: `Claude CLI exited with code ${code}${signal ? ` (signal: ${signal})` : ''}`,
+          exitCode: code,
+          signal,
+          stderr: stderrContext
+        });
+      }
+      this.callbacks.onExit(code);
     });
 
     this.process.on('error', (err) => {
+      console.error('[Claude CLI] Spawn error:', err.message);
       this.callbacks.onError({
         sessionId: this.sessionId,
         error: `Failed to start Claude CLI: ${err.message}`
       });
-    });
-
-    this.process.on('exit', (code) => {
-      console.log('[Claude CLI] process exited with code:', code);
-      this.callbacks.onExit(code);
     });
   }
 
@@ -103,19 +202,14 @@ class ClaudeProcess {
     this.buffer = lines.pop();
 
     for (const line of lines) {
-      if (line.trim()) {
-        try {
-          const event = JSON.parse(line);
-          if (event?.type === 'assistant' && event?.message?.content) {
-            const toolUse = event.message.content.find?.(item => item?.type === 'tool_use');
-            if (toolUse) {
-              console.log('[Claude CLI] Requested tool permission:', JSON.stringify(toolUse, null, 2));
-            }
-          }
-          console.log('[Claude CLI] Received event:', event.type);
-          this.handleStreamEvent(event);
-        } catch (err) {
-        }
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const event = JSON.parse(trimmed);
+        this.lastEventTime = Date.now();
+        this.handleStreamEvent(event);
+      } catch {
+        // Non-JSON line — ignore
       }
     }
   }
@@ -125,12 +219,10 @@ class ClaudeProcess {
       case 'system':
         if (event.session_id) {
           this.claudeSessionId = event.session_id;
-          if (this.callbacks.onSystemInfo) {
-            this.callbacks.onSystemInfo({
-              sessionId: this.sessionId,
-              claudeSessionId: event.session_id
-            });
-          }
+          this.callbacks.onSystemInfo?.({
+            sessionId: this.sessionId,
+            claudeSessionId: event.session_id
+          });
         }
         break;
 
@@ -141,30 +233,49 @@ class ClaudeProcess {
             : [event.message.content];
 
           if (this.isReplayingHistory) {
-            // Cancel debounce timer — more replay events are still arriving
             if (this.replayTimer) { clearTimeout(this.replayTimer); this.replayTimer = null; }
-            // Collect assistant text for history replay
             const texts = [];
-            for (const contentBlock of contentArray) {
-              if (contentBlock.type === 'text' && contentBlock.text) {
-                texts.push(contentBlock.text);
+            for (const block of contentArray) {
+              if (block.type === 'text' && block.text) {
+                texts.push(block.text);
+              } else if (block.type === 'tool_use') {
+                this.historyMessages.push({
+                  role: 'assistant', type: 'tool_use',
+                  toolUseId: block.id, toolName: block.name,
+                  toolInput: block.input, status: 'complete'
+                });
+              } else if (block.type === 'thinking' && block.thinking) {
+                this.historyMessages.push({
+                  role: 'assistant', type: 'thinking',
+                  thinking: block.thinking
+                });
               }
             }
             if (texts.length > 0) {
-              this.historyMessages.push({ role: 'assistant', text: texts.join('') });
+              this.historyMessages.push({ role: 'assistant', type: 'text', text: texts.join('') });
             }
-          } else {
-            for (const contentBlock of contentArray) {
-              if (contentBlock.type === 'tool_use') {
-                console.log('[Claude CLI] assistant tool_use content block:', {
-                  id: contentBlock.id,
-                  name: contentBlock.name,
-                  input: contentBlock.input
+          } else if (!this.hasStreamedContent) {
+            for (const block of contentArray) {
+              if (block.type === 'tool_use') {
+                // Skip if already forwarded via content_block_stop
+                if (this.forwardedToolUseIds.has(block.id)) continue;
+                this.callbacks.onToolUse?.({
+                  sessionId: this.sessionId,
+                  toolUseId: block.id,
+                  toolName: block.name,
+                  toolInput: block.input,
+                  status: 'running'
                 });
-              } else if (contentBlock.type === 'text' && contentBlock.text) {
+              } else if (block.type === 'text' && block.text) {
                 this.callbacks.onChunk({
                   sessionId: this.sessionId,
-                  text: contentBlock.text
+                  text: block.text
+                });
+              } else if (block.type === 'thinking' && block.thinking) {
+                this.callbacks.onThinking?.({
+                  sessionId: this.sessionId,
+                  thinking: block.thinking,
+                  isPartial: false
                 });
               }
             }
@@ -173,31 +284,29 @@ class ClaudeProcess {
         break;
 
       case 'result':
-        console.log('[Claude CLI] result event:', {
-          stop_reason: event?.stop_reason,
-          stop_sequence: event?.stop_sequence,
-          output_tokens: event?.output_tokens
-        });
         if (this.isReplayingHistory) {
-          // Emit progressive history update (don't end replay — more turns may follow)
           if (this.callbacks.onHistory && this.historyMessages.length > 0) {
             this.callbacks.onHistory({
               sessionId: this.sessionId,
               messages: [...this.historyMessages]
             });
           }
-          // Debounce: if no more replay events arrive within 500ms, finalize
+          // Safety timeout for replay finalization
           if (this.replayTimer) clearTimeout(this.replayTimer);
-          this.replayTimer = setTimeout(() => this.finalizeReplay(), 500);
+          this.replayTimer = setTimeout(() => this.finalizeReplay(), REPLAY_SAFETY_TIMEOUT_MS);
         } else {
-          this.callbacks.onComplete({
-            sessionId: this.sessionId
+          this.callbacks.onComplete({ sessionId: this.sessionId });
+          this.callbacks.onTurnComplete?.({
+            sessionId: this.sessionId,
+            costUsd: event.total_cost_usd,
+            usage: event.usage,
+            durationMs: event.duration_ms,
+            numTurns: event.num_turns
           });
         }
         break;
 
       case 'error':
-        console.log('[Claude CLI] error event:', event);
         this.callbacks.onError({
           sessionId: this.sessionId,
           error: event.error?.message || event.message || 'Unknown error'
@@ -206,25 +315,32 @@ class ClaudeProcess {
 
       case 'message_start':
         this.currentContentBlock = null;
+        this.hasStreamedContent = false;
+        this.forwardedToolUseIds.clear();
         break;
 
       case 'content_block_start':
+        this.hasStreamedContent = true;
         if (event.content_block?.type === 'tool_use') {
-          console.log('[Claude CLI] content_block_start tool_use:', {
-            id: event.content_block.id,
-            name: event.content_block.name
-          });
           this.currentContentBlock = {
             type: 'tool_use',
             id: event.content_block.id,
             name: event.content_block.name,
             inputJson: ''
           };
+          this.callbacks.onToolUse?.({
+            sessionId: this.sessionId,
+            toolUseId: event.content_block.id,
+            toolName: event.content_block.name,
+            toolInput: null,
+            status: 'running'
+          });
+        } else if (event.content_block?.type === 'thinking') {
+          this.currentContentBlock = { type: 'thinking', text: '' };
         }
         break;
 
       case 'content_block_delta':
-        // content_block_delta only occurs during live streaming, never during replay
         if (this.isReplayingHistory) {
           this.finalizeReplay();
         }
@@ -235,47 +351,86 @@ class ClaudeProcess {
           });
         } else if (event.delta?.type === 'input_json_delta' && this.currentContentBlock?.type === 'tool_use') {
           this.currentContentBlock.inputJson += event.delta.partial_json;
+        } else if (event.delta?.type === 'thinking_delta' && this.currentContentBlock?.type === 'thinking') {
+          this.currentContentBlock.text += event.delta.thinking;
+          this.callbacks.onThinking?.({
+            sessionId: this.sessionId,
+            thinking: event.delta.thinking,
+            isPartial: true
+          });
         }
         break;
 
       case 'content_block_stop':
         if (this.currentContentBlock?.type === 'tool_use') {
-          console.log('[Claude CLI] content_block_stop tool_use:', {
-            id: this.currentContentBlock.id,
-            name: this.currentContentBlock.name,
-            inputJson: this.currentContentBlock.inputJson
+          let parsedInput = null;
+          try { parsedInput = JSON.parse(this.currentContentBlock.inputJson); } catch { }
+          // Track this ID to prevent duplicate from assistant event
+          this.forwardedToolUseIds.add(this.currentContentBlock.id);
+          this.callbacks.onToolUse?.({
+            sessionId: this.sessionId,
+            toolUseId: this.currentContentBlock.id,
+            toolName: this.currentContentBlock.name,
+            toolInput: parsedInput,
+            status: 'running'
+          });
+          this.currentContentBlock = null;
+        } else if (this.currentContentBlock?.type === 'thinking') {
+          this.callbacks.onThinking?.({
+            sessionId: this.sessionId,
+            thinking: this.currentContentBlock.text,
+            isPartial: false
           });
           this.currentContentBlock = null;
         }
         break;
 
       case 'message_stop':
-        console.log('[Claude CLI] message_stop event');
         if (!this.isReplayingHistory) {
-          this.callbacks.onComplete({
-            sessionId: this.sessionId
-          });
+          this.callbacks.onComplete({ sessionId: this.sessionId });
         }
         break;
 
       case 'user':
         if (event.message && event.message.content) {
-          console.log('[Claude CLI] user event content:', event.message.content);
+          const content = event.message.content;
+
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type === 'tool_result') {
+                this.callbacks.onToolResult?.({
+                  sessionId: this.sessionId,
+                  toolUseId: block.tool_use_id,
+                  result: block.content,
+                  isError: block.is_error || false
+                });
+              }
+            }
+          }
+
           if (this.isReplayingHistory) {
-            // Cancel debounce timer — more replay events are still arriving
             if (this.replayTimer) { clearTimeout(this.replayTimer); this.replayTimer = null; }
-            const content = event.message.content;
             let text = '';
             if (typeof content === 'string') {
               text = content;
             } else if (Array.isArray(content)) {
+              for (const block of content) {
+                if (block.type === 'tool_result') {
+                  this.historyMessages.push({
+                    role: 'tool', type: 'tool_result',
+                    toolUseId: block.tool_use_id,
+                    result: block.content,
+                    isError: block.is_error || false
+                  });
+                }
+              }
               text = content
                 .filter(block => block.type === 'text' && block.text)
                 .map(block => block.text)
                 .join('');
             }
             if (text) {
-              this.historyMessages.push({ role: 'user', text });
+              this.historyMessages.push({ role: 'user', type: 'text', text });
             }
           }
         }
@@ -286,9 +441,6 @@ class ClaudeProcess {
     }
   }
 
-  /**
-   * End history replay mode and emit final collected history
-   */
   finalizeReplay() {
     if (!this.isReplayingHistory) return;
     if (this.replayTimer) {
@@ -296,7 +448,6 @@ class ClaudeProcess {
       this.replayTimer = null;
     }
     this.isReplayingHistory = false;
-    console.log(`[Claude CLI] Replay finalized with ${this.historyMessages.length} messages`);
     if (this.callbacks.onHistory && this.historyMessages.length > 0) {
       this.callbacks.onHistory({
         sessionId: this.sessionId,
@@ -306,23 +457,53 @@ class ClaudeProcess {
     this.historyMessages = [];
   }
 
+  /**
+   * Send a message to the CLI process with backpressure handling.
+   */
   sendMessage(message) {
-    // If still in replay mode when user sends a message, finalize first
     if (this.isReplayingHistory) {
       this.finalizeReplay();
     }
-    if (this.process && this.process.stdin.writable) {
-      const messageObj = {
-        type: 'user',
-        message: {
-          role: 'user',
-          content: message
-        }
-      };
-      this.process.stdin.write(JSON.stringify(messageObj) + '\n');
+    if (!this.process || !this.process.stdin.writable) return;
+
+    const messageObj = {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: message
+      }
+    };
+    const payload = JSON.stringify(messageObj) + '\n';
+
+    if (this.stdinDraining) {
+      this.stdinQueue.push(payload);
+      return;
+    }
+
+    const ok = this.process.stdin.write(payload);
+    if (!ok) {
+      this.stdinDraining = true;
+      this.process.stdin.once('drain', () => {
+        this.stdinDraining = false;
+        this.flushStdinQueue();
+      });
     }
   }
 
+  flushStdinQueue() {
+    while (this.stdinQueue.length > 0 && this.process?.stdin.writable) {
+      const payload = this.stdinQueue.shift();
+      const ok = this.process.stdin.write(payload);
+      if (!ok) {
+        this.stdinDraining = true;
+        this.process.stdin.once('drain', () => {
+          this.stdinDraining = false;
+          this.flushStdinQueue();
+        });
+        return;
+      }
+    }
+  }
 
   stop() {
     if (this.replayTimer) {
@@ -331,21 +512,39 @@ class ClaudeProcess {
     }
 
     if (this.process) {
-      this.process.kill('SIGTERM');
+      const proc = this.process;
+      const pid = proc.pid;
       this.process = null;
+
+      try {
+        process.kill(-pid, 'SIGTERM');
+      } catch {
+        try { proc.kill('SIGTERM'); } catch { }
+      }
+
+      // SIGKILL fallback: if process hasn't exited within 3s, force kill
+      const killTimer = setTimeout(() => {
+        try {
+          process.kill(-pid, 'SIGKILL');
+        } catch {
+          try { proc.kill('SIGKILL'); } catch { }
+        }
+      }, SIGKILL_TIMEOUT_MS);
+
+      proc.once('exit', () => clearTimeout(killTimer));
     }
 
+    // Clean up MCP config immediately (no delay)
     if (this.mcpConfigPath) {
-      try {
-        const fs = require('fs');
-        if (fs.existsSync(this.mcpConfigPath)) {
-          fs.unlinkSync(this.mcpConfigPath);
-        }
-      } catch (error) {
-      }
+      const configPath = this.mcpConfigPath;
       this.mcpConfigPath = null;
+      try {
+        if (fs.existsSync(configPath)) fs.unlinkSync(configPath);
+      } catch { }
     }
   }
 }
 
 module.exports = ClaudeProcess;
+module.exports.getClaudePath = getClaudePath;
+module.exports.validateCLI = validateCLI;

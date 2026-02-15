@@ -61,13 +61,69 @@ class PermissionMCPServer {
               required: ['tool_name', 'tool_use_id'],
             },
           },
+          {
+            name: 'rename_session',
+            description: 'Rename the current chat session with a descriptive title based on the conversation context. Call this after the first user message to set an appropriate session name.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                title: {
+                  type: 'string',
+                  description: 'A concise, descriptive title for the session (max 80 characters). Should summarize the main topic or purpose of the conversation.',
+                },
+              },
+              required: ['title'],
+            },
+          },
         ],
       };
     });
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      if (request.params.name !== 'request_permission') {
-        throw new Error(`Unknown tool: ${request.params.name}`);
+      const toolName = request.params.name;
+
+      // Handle rename_session tool
+      if (toolName === 'rename_session') {
+        const args = request.params.arguments || {};
+        const { title } = args;
+
+        console.error('[MCP Server] rename_session called with title:', title);
+
+        if (!title || typeof title !== 'string') {
+          console.error('[MCP Server] rename_session error: title missing or invalid');
+          return {
+            content: [{
+              type: 'text',
+              text: 'Error: title parameter is required and must be a string'
+            }],
+            isError: true
+          };
+        }
+
+        try {
+          await this.renameSession(title);
+          console.error('[MCP Server] rename_session succeeded:', title);
+          return {
+            content: [{
+              type: 'text',
+              text: `Session renamed to: "${title}"`
+            }]
+          };
+        } catch (error) {
+          console.error('[MCP Server] rename_session failed:', error.message);
+          return {
+            content: [{
+              type: 'text',
+              text: `Failed to rename session: ${error.message}`
+            }],
+            isError: true
+          };
+        }
+      }
+
+      // Handle request_permission tool
+      if (toolName !== 'request_permission') {
+        throw new Error(`Unknown tool: ${toolName}`);
       }
 
       const args = request.params.arguments || {};
@@ -83,7 +139,6 @@ class PermissionMCPServer {
         };
         console.error('[MCP Server] Sending to Electron:', JSON.stringify(permissionData, null, 2));
         const permissionResponse = await this.requestPermissionFromElectron(permissionData);
-        console.log('[MCP Server] Received response from Electron:', JSON.stringify(permissionResponse, null, 2));
         const approved =
           typeof permissionResponse === 'boolean'
             ? permissionResponse
@@ -96,14 +151,6 @@ class PermissionMCPServer {
           typeof permissionResponse === 'object'
             ? permissionResponse.message
             : undefined;
-
-        // Return format expected by Claude CLI --permission-prompt-tool
-        console.log('[MCP Server] Permission decision:', {
-          tool: tool_name,
-          tool_use_id,
-          approved,
-          hasUpdatedInput: updatedInput !== undefined
-        });
 
         if (approved) {
           // Build response - only include updatedInput if we have tool_input
@@ -123,7 +170,6 @@ class PermissionMCPServer {
               },
             ],
           };
-          console.log('[MCP Server] Returning allow payload to Claude CLI:', JSON.stringify(payload));
           return payload;
         } else {
           const payload = {
@@ -137,7 +183,6 @@ class PermissionMCPServer {
               },
             ],
           };
-          console.log('[MCP Server] Returning deny payload to Claude CLI:', JSON.stringify(payload));
           return payload;
         }
       } catch (error) {
@@ -165,8 +210,6 @@ class PermissionMCPServer {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 300000);
 
-    console.log('[MCP Server in requestPermissionFromElectron] Sending to Electron:', JSON.stringify(permissionData, null, 2));
-
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -176,7 +219,6 @@ class PermissionMCPServer {
       });
 
       const response = await res.json();
-      console.log('[MCP Server in requestPermissionFromElectron] Received response from Electron:', JSON.stringify(response, null, 2));
 
       if (typeof response === 'boolean') {
         return { approved: response };
@@ -195,13 +237,53 @@ class PermissionMCPServer {
     }
   }
 
+  /**
+   * Rename session via HTTP request to Electron app
+   */
+  async renameSession(title) {
+    const url = `http://localhost:${ELECTRON_PORT}/rename-session`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: SESSION_ID, title }),
+        signal: controller.signal
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const response = await res.json();
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to rename session');
+      }
+
+      return response;
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        throw new Error('Rename request timed out');
+      }
+      throw new Error(`Failed to rename session: ${error.message}`);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
   async start() {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
+    console.error('[MCP Server] Bhunductor permission server started');
+    console.error('[MCP Server] Session ID:', SESSION_ID);
+    console.error('[MCP Server] Electron port:', ELECTRON_PORT);
   }
 }
 
-    const server = new PermissionMCPServer();
-    server.start().catch((error) => {
-      process.exit(1);
+const server = new PermissionMCPServer();
+server.start().catch((error) => {
+  console.error('[MCP Server] Failed to start:', error);
+  process.exit(1);
 });

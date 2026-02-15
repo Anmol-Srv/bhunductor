@@ -19,7 +19,6 @@ function ensureAppDataDir() {
   const dataDir = getAppDataDir();
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
-    console.log(`[Paths] Created app data directory: ${dataDir}`);
   }
 }
 

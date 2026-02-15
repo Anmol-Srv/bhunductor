@@ -1,12 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import Home from './pages/Home';
 import Dashboard from './pages/Dashboard';
+import ErrorBoundary from './components/ErrorBoundary';
+import { setupIPCListeners } from './ipc/listeners';
 
 function App() {
-  const [currentView, setCurrentView] = useState('home'); // 'home' | 'dashboard'
+  const [currentView, setCurrentView] = useState('home');
   const [currentFolder, setCurrentFolder] = useState(null);
   const [folderHistory, setFolderHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // Set up IPC listeners once on mount
+  useEffect(() => {
+    const cleanup = setupIPCListeners();
+    return cleanup;
+  }, []);
 
   const openFolder = (folder) => {
     if (currentFolder && currentFolder.id === folder.id) {
@@ -59,18 +67,20 @@ function App() {
 
   return (
     <div className="app">
-      {currentView === 'home' ? (
-        <Home onOpenFolder={openFolder} />
-      ) : (
-        <Dashboard
-          folder={currentFolder}
-          onGoHome={goHome}
-          onGoBack={goBack}
-          onGoForward={goForward}
-          canGoBack={canGoBack}
-          canGoForward={canGoForward}
-        />
-      )}
+      <ErrorBoundary>
+        {currentView === 'home' ? (
+          <Home onOpenFolder={openFolder} />
+        ) : (
+          <Dashboard
+            folder={currentFolder}
+            onGoHome={goHome}
+            onGoBack={goBack}
+            onGoForward={goForward}
+            canGoBack={canGoBack}
+            canGoForward={canGoForward}
+          />
+        )}
+      </ErrorBoundary>
     </div>
   );
 }

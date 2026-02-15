@@ -6,7 +6,7 @@
   "scripts": {
     "postinstall": "electron-rebuild",
     "start": "npm run build && electron .",
-    "dev": "concurrently -k \"webpack --mode development --watch\" \"sleep 2 && NODE_ENV=development electronmon .\"",
+    "devi": "concurrently -k \"webpack --mode development --watch\" \"sleep 2 && NODE_ENV=development electronmon .\"",
     "build": "webpack --mode production",
     "watch": "webpack --mode development --watch",
     "pack": "electron-builder --dir",
@@ -22,12 +22,18 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "@monaco-editor/react": "^4.7.0",
     "better-sqlite3": "^11.7.0",
+    "copy-webpack-plugin": "^13.0.1",
     "fastify": "^4.29.1",
+    "highlight.js": "^11.11.1",
     "lucide-react": "^0.563.0",
+    "marked": "^17.0.1",
+    "monaco-editor": "^0.55.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
     "@babel/core": "^7.23.7",

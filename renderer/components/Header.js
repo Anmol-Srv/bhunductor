@@ -31,8 +31,6 @@ function Header({ folderName, folderPath, onGoHome, onGoBack, onGoForward, canGo
       </div>
 
       <div className="breadcrumb">
-        <span className="breadcrumb-app">Bhunductor</span>
-        <span className="breadcrumb-separator">›</span>
         <span className="breadcrumb-folder" title={folderPath}>
           {folderName}
         </span>

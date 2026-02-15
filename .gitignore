@@ -4,6 +4,7 @@ node_modules/
 # Build outputs
 renderer/bundle.js
 renderer/bundle.js.map
+renderer/vs/
 dist/
 
 # Database

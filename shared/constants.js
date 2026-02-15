@@ -14,7 +14,6 @@ const IPC_CHANNELS = {
   WORKTREE_CREATE: 'worktree:create',
   WORKTREE_DELETE: 'worktree:delete',
   WORKTREE_VALIDATE_NAME: 'worktree:validate-name',
-  WORKTREE_GET_ACTIVE_PATH: 'worktree:get-active-path',
   WORKTREE_SET_ACTIVE: 'worktree:set-active',
   WORKTREE_CLEANUP: 'worktree:cleanup',
 
@@ -32,6 +31,23 @@ const IPC_CHANNELS = {
   CLAUDE_CONVERSATION_HISTORY: 'claude:conversation-history',
   CLAUDE_SESSION_GET_HISTORY: 'claude:session-get-history',
   CLAUDE_SESSION_SAVE_MESSAGES: 'claude:session-save-messages',
+  CLAUDE_TOOL_USE: 'claude:tool-use',
+  CLAUDE_TOOL_RESULT: 'claude:tool-result',
+  CLAUDE_THINKING: 'claude:thinking',
+  CLAUDE_TURN_COMPLETE: 'claude:turn-complete',
+  CLAUDE_SESSION_TITLE_UPDATED: 'claude:session-title-updated',
+  CLAUDE_SESSION_RENAME: 'claude:session-rename',
+  CLAUDE_SESSION_ARCHIVE: 'claude:session-archive',
+  CLAUDE_SESSION_UNARCHIVE: 'claude:session-unarchive',
+  CLAUDE_SESSION_LIST_ARCHIVED: 'claude:session-list-archived',
+  CLAUDE_SESSION_GET_LAST: 'claude:session-get-last',
+  CLAUDE_SESSION_LAZY_RESUME: 'claude:session-lazy-resume',
+  CLAUDE_SESSION_CHECK_ALIVE: 'claude:session-check-alive',
+
+  FILE_TREE_GET: 'file:tree-get',
+  FILE_READ_CONTENT: 'file:read-content',
+  FILE_GET_GIT_DIFF: 'file:get-git-diff',
+  FILE_GET_GIT_STATUS: 'file:get-git-status',
 
   APP_GET_VERSION: 'app:get-version',
   APP_QUIT: 'app:quit'

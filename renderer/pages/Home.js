@@ -80,7 +80,10 @@ function Home({ onOpenFolder }) {
   return (
     <div className="home">
       <div className="home-content">
-        <h1 className="logo">Bhunductor</h1>
+        <div className="home-header">
+          <h1 className="home-logo">Bhunductor</h1>
+          <p className="home-tagline">AI-powered development workspace</p>
+        </div>
 
         {error && (
           <div className="error-banner">
@@ -88,36 +91,40 @@ function Home({ onOpenFolder }) {
           </div>
         )}
 
-        {!loading && recentFolders.length > 0 && (
-          <div className="recent-section">
-            <h2 className="recent-title">Recent Folders</h2>
-            <div className="recent-list">
-              {recentFolders.map((folder) => (
-                <div
-                  key={folder.id}
-                  className="folder-item"
-                  onClick={() => handleRecentFolderClick(folder)}
-                >
-                  <div className="folder-item-header">
-                    <Folder size={18} className="folder-icon" />
-                    <span className="folder-name">{folder.name}</span>
-                    <span className="folder-time">
-                      {formatRelativeTime(folder.last_opened)}
-                    </span>
-                  </div>
-                  <div className="folder-path">{folder.path}</div>
-                </div>
-              ))}
+        <div className="home-main">
+          {!loading && recentFolders.length > 0 && (
+            <div className="home-recent-section">
+              <h2 className="home-section-title">Recent</h2>
+              <div className="home-recent-list">
+                {recentFolders.map((folder, idx) => (
+                  <button
+                    key={folder.id}
+                    className="home-recent-item"
+                    onClick={() => handleRecentFolderClick(folder)}
+                    style={{ animationDelay: `${idx * 50}ms` }}
+                  >
+                    <Folder size={14} />
+                    <div className="home-recent-item-text">
+                      <span className="home-recent-name">{folder.name}</span>
+                      <span className="home-recent-path">{folder.path}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        <button
-          className="open-button"
-          onClick={handleOpenFolder}
-        >
-          + Open Folder
-        </button>
+          <div className="home-start-section">
+            <h2 className="home-section-title">Start</h2>
+            <button
+              className="home-action-item"
+              onClick={handleOpenFolder}
+            >
+              <FolderOpen size={16} />
+              <span>Open Folder...</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

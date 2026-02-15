@@ -48,7 +48,6 @@ class Folder {
       // The main repo path is the parent of the .git directory
       const mainRepoPath = path.dirname(absoluteGitDir);
 
-      console.log(`[Folder] Main repo path for ${folderPath}: ${mainRepoPath}`);
       return mainRepoPath;
     } catch (error) {
       console.error('[Folder] Error detecting main repo path:', error);
@@ -76,7 +75,6 @@ class Folder {
       `);
 
       stmt.run(id, actualPath, name);
-      console.log(`[Folder] Created: ${actualPath}`);
 
       return this.findByPath(actualPath);
     } catch (error) {
@@ -96,7 +94,6 @@ class Folder {
       `);
 
       const result = stmt.run(folderPath);
-      console.log(`[Folder] Updated last_opened: ${folderPath}`);
 
       return result.changes > 0;
     } catch (error) {
@@ -157,7 +154,6 @@ class Folder {
     const result = stmt.run(folderId);
 
     if (result.changes > 0) {
-      console.log(`[Folder] Deleted: ${folderId}`);
       return true;
     }
 
@@ -170,7 +166,6 @@ class Folder {
     const result = stmt.run(folderPath);
 
     if (result.changes > 0) {
-      console.log(`[Folder] Deleted by path: ${folderPath}`);
       return true;
     }
 
@@ -185,12 +180,7 @@ class Folder {
       if (!fs.existsSync(folder.path) || !this.isGitRepo(folder.path)) {
         this.delete(folder.id);
         removedCount++;
-        console.log(`[Folder] Cleaned up invalid: ${folder.path}`);
       }
-    }
-
-    if (removedCount > 0) {
-      console.log(`[Folder] Cleanup complete: removed ${removedCount} invalid folders`);
     }
 
     return removedCount;
