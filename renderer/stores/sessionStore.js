@@ -298,6 +298,23 @@ const useSessionStore = create((set, get) => ({
   sendMessage: async (sessionId, message) => {
     return window.electron.invoke('claude:send-message', sessionId, message);
   },
+  sendInstruction: async (sessionId, text, meta) => {
+    // meta: { action, label, fileName }
+    const msgId = crypto.randomUUID();
+    const current = messageCache.get(sessionId) || [];
+    messageCache.set(sessionId, [...current, {
+      id: msgId,
+      role: 'user',
+      type: 'text',
+      text,
+      isInstruction: true,
+      instructionMeta: meta
+    }]);
+    set(state => ({
+      _messageCacheVersion: (state._messageCacheVersion || 0) + 1
+    }));
+    return window.electron.invoke('claude:send-message', sessionId, text);
+  },
   respondToPermission: async (sessionId, requestId, approved) => {
     const result = await window.electron.invoke('claude:permission-respond', requestId, approved);
     if (result.success) {

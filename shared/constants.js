@@ -49,8 +49,14 @@ const IPC_CHANNELS = {
   FILE_GET_GIT_DIFF: 'file:get-git-diff',
   FILE_GET_GIT_STATUS: 'file:get-git-status',
 
+  GIT_GET_PROFILE: 'git:get-profile',
+  GIT_GET_CONFIG: 'git:get-config',
+  GIT_GET_LOG: 'git:get-log',
+  GIT_GET_CHECKS: 'git:get-checks',
+
   APP_GET_VERSION: 'app:get-version',
-  APP_QUIT: 'app:quit'
+  APP_QUIT: 'app:quit',
+  APP_OPEN_EXTERNAL: 'app:open-external'
 };
 
 // App paths

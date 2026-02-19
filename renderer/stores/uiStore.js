@@ -10,9 +10,12 @@ const useUIStore = create((set, get) => ({
   activeFolderId: null,
   sidebarCollapsed: false,
   filePanelCollapsed: false,
+  settingsOpen: false,
 
   toggleSidebar: () => set(state => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   toggleFilePanel: () => set(state => ({ filePanelCollapsed: !state.filePanelCollapsed })),
+  toggleSettings: () => set(state => ({ settingsOpen: !state.settingsOpen })),
+  closeSettings: () => set({ settingsOpen: false }),
 
   // Set the active folder (switches tab context)
   setActiveFolder: (folderId) => set({ activeFolderId: folderId }),

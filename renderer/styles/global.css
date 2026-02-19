@@ -67,49 +67,39 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 
 .home-header {
   text-align: center;
-  margin-bottom: 80px;
+  margin-bottom: var(--spacing-2xl);
 }
 
 .home-logo {
-  font-size: 72px;
+  font-size: 56px;
   font-weight: 300;
-  letter-spacing: -3px;
+  letter-spacing: -2.5px;
   margin: 0 0 var(--spacing-sm) 0;
   color: var(--ink);
   background: linear-gradient(135deg, var(--ink) 0%, var(--conductor) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  animation: logoGlow 3s ease-in-out infinite;
-}
-
-@keyframes logoGlow {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.85;
-  }
 }
 
 .home-tagline {
-  font-size: 14px;
-  color: var(--ink-secondary);
+  font-size: var(--text-base);
+  color: var(--ink-muted);
   margin: 0;
   font-weight: 400;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
 }
 
 .error-banner {
   width: 100%;
   padding: var(--spacing-md);
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid var(--gate-deny);
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
   border-radius: var(--radius-md);
   color: var(--gate-deny);
   margin-bottom: var(--spacing-xl);
   text-align: center;
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 
 .home-main {
@@ -124,7 +114,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 .home-recent-section {
   background: var(--surface-raised);
   border: 1px solid var(--edge);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
   animation: sectionSlideUp 0.5s ease-out;
 }
@@ -151,12 +141,12 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .home-section-title {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
-  color: var(--ink-secondary);
+  color: var(--ink-muted);
   text-transform: uppercase;
   letter-spacing: 1px;
-  margin: 0 0 var(--spacing-md) 0;
+  margin: 0 0 var(--spacing-sm) 0;
 }
 
 .home-action-item {
@@ -164,12 +154,12 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
-  padding: 12px var(--spacing-md);
-  background: var(--surface-base);
-  border: 1px solid rgba(var(--conductor-rgb), 0.2);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--surface-overlay);
+  border: 1px solid var(--edge);
   border-radius: var(--radius-sm);
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -177,14 +167,12 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .home-action-item:hover {
-  background: var(--surface-overlay);
-  border-color: var(--conductor);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: var(--surface-hover);
+  border-color: var(--edge-strong);
 }
 
 .home-action-item:active {
-  transform: translateY(0);
+  background: var(--surface-overlay);
 }
 
 .home-action-item svg {
@@ -202,9 +190,9 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
-  padding: 10px var(--spacing-md);
-  background: var(--surface-base);
-  border: 1px solid var(--edge);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -226,8 +214,11 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 
 .home-recent-item:hover {
   background: var(--surface-overlay);
-  border-color: var(--edge-strong);
-  transform: translateX(2px);
+  border-color: var(--edge);
+}
+
+.home-recent-item:active {
+  background: var(--surface-hover);
 }
 
 .home-recent-item svg {
@@ -244,7 +235,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .home-recent-name {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--ink);
   font-weight: 400;
   overflow: hidden;
@@ -253,7 +244,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .home-recent-path {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--ink-muted);
   font-family: var(--font-mono);
   overflow: hidden;
@@ -287,12 +278,12 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .nav-btn {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-sm);
   background: transparent;
   border: none;
-  color: var(--ink-secondary);
+  color: var(--ink-muted);
   cursor: pointer;
   transition: all var(--transition-fast);
   display: flex;
@@ -306,32 +297,37 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   color: var(--ink);
 }
 
+.nav-btn:active:not(:disabled) {
+  background: var(--surface-overlay);
+}
+
 .nav-btn:disabled {
-  opacity: 0.3;
+  opacity: 0.25;
   cursor: not-allowed;
 }
 
 .breadcrumb {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  font-size: 14px;
+  gap: 6px;
+  font-size: var(--text-base);
   -webkit-app-region: no-drag;
 }
 
 .breadcrumb-app {
-  color: var(--ink-secondary);
+  color: var(--ink-muted);
   font-weight: 500;
 }
 
 .breadcrumb-separator {
-  color: var(--ink-muted);
+  color: var(--ink-faint);
 }
 
 .breadcrumb-folder {
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--text-sm);
+  font-weight: 500;
 }
 
 .header-spacer {
@@ -346,7 +342,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 
 /* Sidebar Styles */
 .sidebar {
-  width: 250px;
+  width: 240px;
   background: var(--surface-raised);
   border-right: 1px solid var(--edge);
   transition: width var(--transition-slow);
@@ -356,7 +352,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .sidebar.collapsed {
-  width: 50px;
+  width: 48px;
 }
 
 .sidebar-content {
@@ -366,13 +362,13 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .sidebar-header {
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-sm) var(--spacing-sm) var(--spacing-md);
   border-bottom: 1px solid var(--edge);
   display: flex;
   justify-content: space-between;
   align-items: center;
   color: var(--ink-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 1px;
   flex-shrink: 0;
@@ -417,7 +413,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 
 .placeholder {
   color: var(--ink-muted);
-  font-size: 14px;
+  font-size: var(--text-md);
   text-transform: uppercase;
   letter-spacing: 2px;
 }
@@ -491,7 +487,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .session-count {
-  font-size: 10px;
+  font-size: var(--text-xs);
   min-width: 16px;
   height: 16px;
   display: flex;
@@ -513,10 +509,11 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  padding: 6px 10px;
+  padding: 6px var(--spacing-sm);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-secondary);
+  border-radius: var(--radius-xs);
   transition: background-color var(--transition-fast);
 }
 
@@ -544,8 +541,8 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .session-time {
-  font-size: 10px;
-  color: var(--ink-muted);
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
   line-height: 1.2;
 }
 
@@ -567,9 +564,9 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 .archive-sessions-toggle {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: 4px;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
   background: none;
   border: none;
   cursor: pointer;
@@ -594,14 +591,14 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .archive-sessions-label {
-  font-size: 11px;
+  font-size: var(--text-sm);
   color: var(--ink-muted);
   font-weight: 500;
   letter-spacing: 0.2px;
 }
 
 .archive-sessions-count {
-  font-size: 10px;
+  font-size: var(--text-xs);
   color: var(--ink-muted);
   margin-left: auto;
 }
@@ -611,8 +608,8 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .archive-sessions-list .session-item {
-  padding: 5px 10px;
-  font-size: 12px;
+  padding: 5px var(--spacing-sm);
+  font-size: var(--text-sm);
   color: var(--ink-muted);
 }
 
@@ -622,16 +619,16 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .archive-empty {
-  padding: 6px 10px;
-  font-size: 11px;
+  padding: 6px var(--spacing-sm);
+  font-size: var(--text-sm);
   color: var(--ink-muted);
   font-style: italic;
 }
 
 .session-status-badge {
   font-size: 9px;
-  padding: 1px 4px;
-  border-radius: 3px;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
   font-weight: 500;
   letter-spacing: 0.2px;
   flex-shrink: 0;
@@ -683,14 +680,14 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  padding: 8px 10px;
-  border-radius: 4px;
+  padding: 6px var(--spacing-sm);
+  border-radius: var(--radius-sm);
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--ink-muted);
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   width: 100%;
 }
 
@@ -699,20 +696,25 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   color: var(--conductor);
 }
 
+.new-session-btn:active {
+  background-color: var(--surface-hover);
+}
+
 .branch-name {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: var(--text-base);
+  font-weight: 400;
 }
 
 .main-badge {
   font-size: 9px;
-  padding: 1px 4px;
-  background-color: var(--surface-hover);
+  padding: 1px 5px;
+  background-color: var(--surface-overlay);
   color: var(--ink-muted);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   font-weight: 500;
   letter-spacing: 0.3px;
 }
@@ -796,8 +798,8 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   text-align: left;
   color: var(--ink);
   cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.2s ease;
+  font-size: var(--text-base);
+  transition: background-color var(--transition-fast);
 }
 
 .menu-item:hover {
@@ -855,7 +857,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   border: 1px solid var(--edge-strong);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl);
-  max-width: 500px;
+  max-width: 480px;
   width: 90%;
   max-height: 90vh;
   overflow: auto;
@@ -871,7 +873,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 
 .modal-header h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--text-lg);
   font-weight: 600;
 }
 
@@ -913,19 +915,19 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 .form-group label {
   display: block;
   margin-bottom: var(--spacing-xs);
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 500;
   color: var(--ink);
 }
 
 .form-group input {
   width: 100%;
-  padding: var(--spacing-sm) 12px;
-  background-color: var(--surface-base);
+  padding: var(--spacing-sm) var(--spacing-sm);
+  background-color: var(--surface-input);
   border: 1px solid var(--edge-strong);
   border-radius: var(--radius-sm);
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--text-base);
   transition: border-color var(--transition-fast);
 }
 
@@ -941,13 +943,13 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 
 .error-message {
   margin-top: var(--spacing-xs);
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--gate-deny);
 }
 
 .help-text {
   margin-top: var(--spacing-xs);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-secondary);
 }
 
@@ -958,7 +960,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   padding: var(--spacing-sm) var(--spacing-md);
   border: none;
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -976,6 +978,10 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   background-color: var(--conductor-hover);
 }
 
+.btn-primary:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -984,11 +990,15 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 .btn-secondary {
   background-color: var(--surface-raised);
   color: var(--ink);
-  border: 1px solid var(--edge);
+  border: 1px solid var(--edge-strong);
 }
 
 .btn-secondary:hover {
   background-color: var(--surface-hover);
+}
+
+.btn-secondary:active {
+  background-color: var(--surface-overlay);
 }
 
 .btn-danger {
@@ -997,7 +1007,11 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .btn-danger:hover {
-  background-color: #dc2626;
+  background-color: var(--gate-deny-hover);
+}
+
+.btn-danger:active {
+  transform: scale(0.97);
 }
 
 /* Warning Icon */
@@ -1036,13 +1050,13 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 .tab-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
+  gap: 6px;
+  padding: var(--spacing-sm) var(--spacing-md);
   background-color: transparent;
   border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-sm);
   white-space: nowrap;
   color: var(--ink-muted);
   transition: all var(--transition-fast);
@@ -1051,6 +1065,10 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 .tab-item:hover {
   background-color: var(--surface-overlay);
   color: var(--ink-secondary);
+}
+
+.tab-item:active {
+  background-color: var(--surface-hover);
 }
 
 .tab-item.active {
@@ -1115,6 +1133,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .tab-panel {
+  display: flex;
   flex: 1;
   flex-direction: column;
   overflow: hidden;
@@ -1127,7 +1146,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 
 .close-modal .modal-body p {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--ink-secondary);
 }
 
@@ -1147,17 +1166,17 @@ code, pre, .chat-input-box textarea, .file-tree-name,
    Welcome Banner (minimal session init)
    ======================================== */
 .welcome-banner {
-  padding: 12px 24px;
+  padding: var(--spacing-sm) var(--spacing-lg);
   border-bottom: 1px solid var(--edge);
 }
 
 .welcome-text {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-muted);
   font-family: var(--font-mono);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-sm);
 }
 
 .welcome-model {
@@ -1166,8 +1185,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .welcome-separator {
-  color: var(--ink-muted);
-  opacity: 0.4;
+  color: var(--ink-faint);
 }
 
 .welcome-branch {
@@ -1179,15 +1197,15 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 .chat-user-msg {
   align-self: flex-end;
   max-width: 80%;
-  padding: 10px 16px;
+  padding: var(--spacing-sm) var(--spacing-md);
   background-color: var(--conductor-muted);
   color: var(--ink);
-  border-radius: var(--radius-sm);
-  font-size: 13px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
   line-height: 1.55;
   white-space: pre-wrap;
   word-wrap: break-word;
-  margin: 16px 24px 8px;
+  margin: var(--spacing-md) var(--spacing-lg) var(--spacing-sm);
 }
 
 /* Assistant response block (wraps text + footer) */
@@ -1201,10 +1219,10 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 
 /* Assistant text — clean, padded */
 .chat-assistant-msg {
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.6;
   color: var(--ink);
-  padding: 8px 24px;
+  padding: var(--spacing-sm) var(--spacing-lg);
 }
 
 /* Response footer — copy btn + cost/time meta */
@@ -1212,7 +1230,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 2px 24px 4px;
+  padding: 0 var(--spacing-lg) var(--spacing-xs);
   opacity: 0;
   transition: opacity var(--transition-fast);
 }
@@ -1220,7 +1238,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 .chat-response-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-sm);
 }
 
 .copy-response-btn {
@@ -1245,7 +1263,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
    AskUserQuestion — tabbed terminal picker
    ======================================== */
 .ask-block {
-  padding: 12px 24px 16px;
+  padding: var(--spacing-sm) var(--spacing-lg) var(--spacing-md);
   outline: none;
   border-top: 1px solid var(--edge);
   background-color: var(--surface-raised);
@@ -1257,16 +1275,16 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   display: flex;
   gap: 0;
   border-bottom: 1px solid var(--edge);
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-sm);
 }
 
 .ask-step {
-  padding: 4px 12px;
+  padding: var(--spacing-xs) var(--spacing-sm);
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
   color: var(--ink-muted);
-  font-size: 11px;
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
   transition: color var(--transition-fast);
@@ -1289,16 +1307,16 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 .ask-step.done::after {
   content: ' \2713';
   color: var(--conductor);
-  font-size: 10px;
+  font-size: var(--text-xs);
 }
 
 /* Body — question + options */
 .ask-body {
-  padding: 2px 0;
+  padding: 0;
 }
 
 .ask-question {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--ink-secondary);
   margin-bottom: 6px;
   line-height: 1.4;
@@ -1308,7 +1326,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   display: flex;
   flex-direction: column;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -1363,14 +1381,14 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 .stream-loader {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 24px;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-lg);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .stream-loader-spinner {
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--conductor);
 }
 
@@ -1399,8 +1417,8 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 24px;
-  font-size: 12px;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  font-size: var(--text-sm);
   color: var(--gate-deny);
 }
 
@@ -1410,7 +1428,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
    Chat Input Area
    ======================================== */
 .chat-input-area {
-  padding: 10px 16px 14px;
+  padding: var(--spacing-sm) var(--spacing-md) var(--spacing-md);
   background-color: var(--surface-base);
 }
 
@@ -1418,7 +1436,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   position: relative;
   background-color: var(--surface-raised);
   border: 1px solid var(--edge-strong);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   transition: border-color var(--transition-fast);
 }
 
@@ -1430,11 +1448,11 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   width: 100%;
   min-height: 38px;
   max-height: 200px;
-  padding: 10px 14px 6px;
+  padding: var(--spacing-sm) var(--spacing-md) var(--spacing-xs);
   background: transparent;
   border: none;
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-family: inherit;
   resize: none;
   line-height: 1.4;
@@ -1448,7 +1466,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 
 .chat-input-box textarea::placeholder {
   color: var(--ink-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 
 /* Toolbar row inside input box */
@@ -1456,7 +1474,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 6px 6px;
+  padding: var(--spacing-xs) var(--spacing-sm) var(--spacing-sm);
 }
 
 .chat-input-toolbar-left {
@@ -1511,6 +1529,10 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   background-color: var(--conductor-hover);
 }
 
+.chat-send-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
 .chat-send-btn:disabled {
   opacity: 0.15;
   cursor: not-allowed;
@@ -1533,7 +1555,11 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .chat-stop-btn:hover {
-  opacity: 0.85;
+  background-color: var(--gate-deny-hover);
+}
+
+.chat-stop-btn:active {
+  transform: scale(0.94);
 }
 
 /* Sidebar Section */
@@ -1547,21 +1573,26 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 .start-session-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: calc(100% - 16px);
-  margin: 8px;
-  padding: 10px;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  margin: var(--spacing-sm);
   background-color: var(--conductor);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--ink);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 500;
+  transition: background-color var(--transition-fast);
 }
 
 .start-session-btn:hover {
   background-color: var(--conductor-hover);
+}
+
+.start-session-btn:active {
+  background-color: var(--conductor);
+  opacity: 0.9;
 }
 
 /* Empty State */
@@ -1572,26 +1603,35 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   justify-content: center;
   flex: 1;
   color: var(--ink-muted);
-  gap: 4px;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xl);
 }
 
 .empty-state-icon {
-  font-size: 36px;
-  color: var(--ink-muted);
-  opacity: 0.5;
-  margin-bottom: 8px;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--conductor-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--conductor);
+  margin-bottom: var(--spacing-sm);
+  font-size: var(--text-xl);
+  line-height: 1;
 }
 
 .empty-state h2 {
-  margin: 0 0 4px 0;
-  font-size: 16px;
+  margin: 0 0 var(--spacing-xs) 0;
+  font-size: var(--text-md);
   font-weight: 500;
   color: var(--ink-secondary);
 }
 
 .empty-state p {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--text-base);
+  color: var(--ink-muted);
 }
 
 /* Permission Bar — strip above input */
@@ -1604,9 +1644,9 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 .permission-bar-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  font-size: 13px;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--text-base);
 }
 
 .permission-bar-toggle {
@@ -1638,7 +1678,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-muted);
   min-width: 0;
 }
@@ -1646,7 +1686,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 .permission-bar-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-sm);
   margin-left: auto;
   flex-shrink: 0;
 }
@@ -1656,11 +1696,11 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 16px;
+  padding: 6px var(--spacing-md);
   border-radius: var(--radius-sm);
   border: none;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   transition: all var(--transition-fast);
 }
@@ -1679,15 +1719,21 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 
 .permission-bar-approve {
   background-color: var(--conductor);
-  color: #fff;
+  color: white;
 }
 
 .permission-bar-approve:hover {
   background-color: var(--conductor-hover);
 }
 
+.permission-bar-approve:active,
+.permission-bar-deny:active {
+  transform: scale(0.97);
+}
+
 .permission-bar-detail {
-  padding: 0 16px 10px 34px;
+  padding: 0 var(--spacing-md) var(--spacing-sm);
+  margin-left: var(--spacing-xl);
   max-height: 180px;
   overflow-y: auto;
 }
@@ -1697,7 +1743,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   white-space: pre-wrap;
   word-break: break-word;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-sm);
   line-height: 1.4;
   color: var(--ink-muted);
 }
@@ -1707,7 +1753,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
    Tool Line (compact single-line)
    ======================================== */
 .tool-line {
-  padding: 0 24px;
+  padding: 0 var(--spacing-lg);
 }
 
 .tool-line-header {
@@ -1717,7 +1763,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   padding: 3px 0;
   cursor: pointer;
   user-select: none;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.4;
 }
 
@@ -1758,13 +1804,13 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-muted);
 }
 
 .tool-line-body {
-  margin-left: 30px;
-  padding: 4px 0 8px;
+  margin-left: var(--spacing-xl);
+  padding: var(--spacing-xs) 0 var(--spacing-sm);
   max-height: 250px;
   overflow-y: auto;
 }
@@ -1774,7 +1820,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   white-space: pre-wrap;
   word-break: break-word;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-sm);
   line-height: 1.4;
   color: var(--ink-muted);
 }
@@ -1787,7 +1833,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
    Tool Call Group (collapsed multi-tool)
    ======================================== */
 .tool-call-group {
-  margin: 2px 24px;
+  margin: 2px var(--spacing-lg);
   border-left: 2px solid var(--edge-strong);
 }
 
@@ -1795,9 +1841,9 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: var(--spacing-xs) var(--spacing-sm);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-secondary);
   user-select: none;
 }
@@ -1832,7 +1878,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
    Thinking Line (compact single-line)
    ======================================== */
 .thinking-line {
-  padding: 0 24px;
+  padding: 0 var(--spacing-lg);
 }
 
 .thinking-line-header {
@@ -1842,7 +1888,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   padding: 3px 0;
   cursor: pointer;
   user-select: none;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.4;
 }
 
@@ -1857,13 +1903,13 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 
 .thinking-spinner {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--conductor);
   flex-shrink: 0;
 }
 
 .thinking-done {
-  font-size: 11px;
+  font-size: var(--text-sm);
   color: var(--ink-muted);
   flex-shrink: 0;
 }
@@ -1880,14 +1926,14 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-muted);
 }
 
 .thinking-line-body {
-  margin-left: 30px;
-  padding: 4px 0 8px;
-  font-size: 12px;
+  margin-left: var(--spacing-xl);
+  padding: var(--spacing-xs) 0 var(--spacing-sm);
+  font-size: var(--text-sm);
   color: var(--ink-muted);
   max-height: 200px;
   overflow-y: auto;
@@ -1899,7 +1945,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
    Turn Cost Badge (inline in response footer)
    ======================================== */
 .turn-cost-badge {
-  font-size: 11px;
+  font-size: var(--text-sm);
   color: var(--ink-muted);
 }
 
@@ -1909,22 +1955,21 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 .markdown-content {
   line-height: 1.55;
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 
 .markdown-content h1,
 .markdown-content h2,
 .markdown-content h3 {
-  margin: 10px 0 6px;
+  margin: var(--spacing-md) 0 var(--spacing-xs);
   color: var(--ink);
   line-height: 1.3;
-  font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
-.markdown-content h1 { font-size: 16px; }
-.markdown-content h2 { font-size: 14px; }
-.markdown-content h3 { font-size: 13px; }
+.markdown-content h1 { font-size: var(--text-lg); }
+.markdown-content h2 { font-size: var(--text-md); font-weight: 600; }
+.markdown-content h3 { font-size: var(--text-base); font-weight: 600; }
 
 .markdown-content p {
   margin: 0 0 6px;
@@ -1947,25 +1992,25 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 .markdown-content code {
   background: var(--surface-overlay);
   padding: 2px 5px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .markdown-content pre {
   background: var(--surface-overlay);
-  padding: 12px 14px;
-  border-radius: var(--radius-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
   border: 1px solid var(--edge);
   overflow-x: auto;
-  margin: 8px 0;
+  margin: var(--spacing-sm) 0;
 }
 
 .markdown-content pre code {
   background: transparent;
   padding: 0;
   border-radius: 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 
@@ -2030,7 +2075,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
    File Panel (right sidebar)
    ======================================== */
 .file-panel {
-  width: 280px;
+  width: 260px;
   background: var(--surface-raised);
   border-left: 1px solid var(--edge);
   display: flex;
@@ -2067,18 +2112,18 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .file-panel-mode-btn {
-  padding: 8px 14px;
+  padding: var(--spacing-sm) var(--spacing-sm);
   border: none;
   background: transparent;
   border-bottom: 2px solid transparent;
   color: var(--ink-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--spacing-xs);
   white-space: nowrap;
 }
 
@@ -2098,7 +2143,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .file-panel-count {
-  font-size: 10px;
+  font-size: var(--text-xs);
   min-width: 16px;
   height: 16px;
   display: flex;
@@ -2108,7 +2153,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   background: var(--conductor-muted);
   color: var(--conductor);
   font-weight: 600;
-  padding: 0 4px;
+  padding: 0 var(--spacing-xs);
 }
 
 .file-panel-actions {
@@ -2147,7 +2192,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 .file-panel-empty,
 .file-panel-error {
   padding: var(--spacing-md);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-muted);
   text-align: center;
 }
@@ -2163,9 +2208,9 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 3px var(--spacing-sm);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--ink-secondary);
   transition: background-color var(--transition-fast);
   white-space: nowrap;
@@ -2246,10 +2291,10 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 .changes-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: var(--spacing-sm);
+  padding: 5px var(--spacing-sm);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--ink-secondary);
   transition: background-color var(--transition-fast);
   line-height: 1.4;
@@ -2266,7 +2311,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .changes-diff-stats {
@@ -2274,7 +2319,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   align-items: center;
   gap: 6px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-sm);
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -2302,7 +2347,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
+  padding: var(--spacing-sm) var(--spacing-md);
   border-bottom: 1px solid var(--edge);
   background: var(--surface-raised);
   flex-shrink: 0;
@@ -2311,19 +2356,19 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 .file-viewer-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-sm);
   min-width: 0;
 }
 
 .file-viewer-name {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--ink);
   white-space: nowrap;
 }
 
 .file-viewer-path {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-muted);
   font-family: var(--font-mono);
   overflow: hidden;
@@ -2332,10 +2377,10 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .file-viewer-badge {
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 600;
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   white-space: nowrap;
 }
 
@@ -2368,14 +2413,14 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 }
 
 .file-viewer-toggle-btn {
-  padding: 3px 10px;
+  padding: 3px var(--spacing-sm);
   border: none;
   background: transparent;
   color: var(--ink-muted);
-  font-size: 11px;
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   transition: all var(--transition-fast);
 }
 
@@ -2385,7 +2430,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 
 .file-viewer-toggle-btn.active {
   background: var(--conductor);
-  color: #fff;
+  color: white;
 }
 
 .file-viewer-content {
@@ -2400,7 +2445,7 @@ code, pre, .chat-input-box textarea, .file-tree-name,
   align-items: center;
   justify-content: center;
   height: 100%;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--ink-muted);
 }
 
@@ -2416,4 +2461,683 @@ code, pre, .chat-input-box textarea, .file-tree-name,
 
 .tab-item.active .tab-file-icon {
   color: var(--conductor);
+}
+
+/* ========================================
+   Settings Modal — sidebar nav layout
+   ======================================== */
+.settings-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+}
+
+.settings-modal {
+  width: 80%;
+  max-width: 860px;
+  height: 75vh;
+  background: var(--surface-base);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  overflow: hidden;
+}
+
+/* Sidebar */
+.settings-sidebar {
+  width: 200px;
+  background: var(--surface-raised);
+  border-right: 1px solid var(--edge);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  padding: var(--spacing-md) 0;
+}
+
+.settings-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--spacing-sm) var(--spacing-md);
+  margin: 0 var(--spacing-sm) var(--spacing-md);
+  background: none;
+  border: none;
+  color: var(--ink-secondary);
+  font-size: var(--text-base);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.settings-back:hover {
+  color: var(--ink);
+  background: var(--surface-hover);
+}
+
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 var(--spacing-sm);
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-sm);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--ink-secondary);
+  font-size: var(--text-base);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: left;
+}
+
+.settings-nav-item:hover {
+  color: var(--ink);
+  background: var(--surface-hover);
+}
+
+.settings-nav-item.active {
+  color: var(--ink);
+  background: var(--surface-overlay);
+}
+
+.settings-nav-item svg {
+  color: var(--ink-muted);
+  flex-shrink: 0;
+}
+
+.settings-nav-item.active svg {
+  color: var(--ink-secondary);
+}
+
+/* Content area */
+.settings-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-xl) var(--spacing-xl) var(--spacing-xl) 40px;
+}
+
+.settings-page-title {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 var(--spacing-lg) 0;
+  letter-spacing: -0.3px;
+}
+
+.settings-card-loading {
+  font-size: var(--text-base);
+  color: var(--ink-muted);
+  padding: var(--spacing-sm) 0;
+}
+
+/* Row-based settings (label+desc left, control right, border-separated) */
+.settings-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+  padding: 16px 0;
+  border-bottom: 1px solid var(--edge);
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-row-label {
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.settings-row-desc {
+  font-size: var(--text-base);
+  color: var(--ink-muted);
+  line-height: 1.4;
+}
+
+.settings-row-value {
+  font-size: var(--text-base);
+  color: var(--ink-secondary);
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.settings-row-value.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.settings-select {
+  padding: 6px var(--spacing-sm);
+  background: var(--surface-overlay);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  min-width: 130px;
+}
+
+.settings-select:focus {
+  outline: none;
+  border-color: var(--conductor);
+}
+
+/* Git Profile Page — centered profile layout */
+.git-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: var(--spacing-xl);
+}
+
+.git-page-loading {
+  font-size: 13px;
+  color: var(--ink-muted);
+  padding: var(--spacing-xl) 0;
+  text-align: center;
+}
+
+.git-page-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding-bottom: var(--spacing-lg);
+}
+
+.git-page-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 2px solid var(--edge-strong);
+  box-shadow: 0 0 0 4px var(--surface-overlay);
+}
+
+.git-page-avatar-fallback {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--surface-overlay) 0%, var(--surface-hover) 100%);
+  border: 2px solid var(--edge-strong);
+  box-shadow: 0 0 0 4px var(--surface-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-secondary);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.git-page-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.git-page-name {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+  letter-spacing: -0.3px;
+}
+
+.git-page-handle {
+  font-size: var(--text-md);
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+}
+
+/* Detail chips — horizontal row of info */
+.git-page-details {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding-bottom: var(--spacing-lg);
+  border-bottom: 1px solid var(--edge);
+  width: 100%;
+}
+
+.git-detail-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px var(--spacing-sm);
+  background: var(--surface-overlay);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  color: var(--ink-secondary);
+}
+
+.git-detail-chip svg {
+  color: var(--ink-muted);
+  flex-shrink: 0;
+}
+
+/* Repository config section below profile */
+.git-page-repo-section {
+  width: 100%;
+  padding-top: var(--spacing-lg);
+}
+
+.git-page-section-title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: var(--spacing-sm);
+}
+
+.git-page-repo-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.git-repo-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--edge);
+}
+
+.git-repo-field:last-child {
+  border-bottom: none;
+}
+
+.git-repo-field-label {
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.git-repo-field-value {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+/* Git Graph */
+.git-graph-list {
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.git-graph-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+  padding: 1px 0;
+}
+
+.git-graph-art {
+  color: var(--conductor);
+  flex-shrink: 0;
+}
+
+.git-graph-hash {
+  color: var(--ink-muted);
+  flex-shrink: 0;
+}
+
+.git-graph-subject {
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.git-graph-refs {
+  color: var(--conductor);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.git-graph-date {
+  color: var(--ink-muted);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* Settings button in header */
+.settings-btn {
+  -webkit-app-region: no-drag;
+}
+
+/* PR badge in header */
+.header-pr-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px var(--spacing-sm);
+  background: var(--conductor-muted);
+  border: 1px solid rgba(var(--conductor-rgb), 0.3);
+  border-radius: var(--radius-full);
+  color: var(--conductor);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  -webkit-app-region: no-drag;
+}
+
+.header-pr-badge:hover {
+  background: rgba(var(--conductor-rgb), 0.18);
+  border-color: var(--conductor);
+}
+
+.header-pr-badge:active {
+  transform: scale(0.97);
+}
+
+/* ========================================
+   Checks Panel
+   ======================================== */
+.checks-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: var(--spacing-sm);
+}
+
+.checks-loading,
+.checks-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--spacing-md);
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+}
+
+.checks-error {
+  color: var(--gate-deny);
+}
+
+.checks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.check-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding: 10px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-overlay);
+  border: 1px solid var(--edge);
+}
+
+.check-item-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.check-item-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.check-icon-warn {
+  background: rgba(212, 160, 23, 0.12);
+  color: var(--gate-caution);
+}
+
+.check-icon-info {
+  background: var(--conductor-muted);
+  color: var(--conductor);
+}
+
+.check-icon-success {
+  background: rgba(34, 197, 94, 0.10);
+  color: var(--stream-live);
+}
+
+.check-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.check-item-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.check-item-sublabel {
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.check-item-btn {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--surface-hover);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.check-item-btn:hover:not(:disabled) {
+  background: var(--conductor-muted);
+  border-color: var(--conductor);
+  color: var(--conductor);
+}
+
+.check-item-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.checks-pr-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--edge);
+}
+
+.checks-pr-input,
+.checks-pr-textarea {
+  width: 100%;
+  padding: 6px var(--spacing-sm);
+  background: var(--surface-overlay);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  resize: none;
+  transition: border-color var(--transition-fast);
+}
+
+.checks-pr-input::placeholder,
+.checks-pr-textarea::placeholder {
+  color: var(--ink-muted);
+}
+
+.checks-pr-input:focus,
+.checks-pr-textarea:focus {
+  outline: none;
+  border-color: var(--conductor);
+}
+
+.checks-pr-textarea {
+  line-height: 1.4;
+  min-height: 60px;
+}
+
+
+.checks-no-session {
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  text-align: center;
+  padding: var(--spacing-sm) 0;
+}
+
+.checks-refresh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-sm);
+  padding: 5px;
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.checks-refresh:hover {
+  color: var(--ink-secondary);
+  background: var(--surface-hover);
+}
+
+/* ========================================
+   Instruction Card (file-attachment style)
+   ======================================== */
+.instruction-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.instruction-attachment {
+  background: var(--surface-overlay);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+  overflow: hidden;
+}
+
+.instruction-attachment:hover {
+  border-color: var(--edge-strong);
+}
+
+.instruction-attachment-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+.instruction-attachment-icon {
+  color: var(--ink-muted);
+  flex-shrink: 0;
+}
+
+.instruction-attachment-title {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--ink);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.instruction-attachment-chevron {
+  color: var(--ink-muted);
+  flex-shrink: 0;
+}
+
+.instruction-attachment-preview {
+  padding: 0 var(--spacing-sm) var(--spacing-xs);
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.instruction-attachment-body {
+  padding: 0 var(--spacing-sm) var(--spacing-sm);
+  font-size: var(--text-sm);
+  color: var(--ink-secondary);
+  border-top: 1px solid var(--edge);
+  max-height: 300px;
+  overflow-y: auto;
+  cursor: default;
+}
+
+.instruction-attachment-body .markdown-content {
+  font-size: var(--text-sm);
+}
+
+.instruction-label {
+  font-size: var(--text-sm);
+  color: var(--ink-secondary);
+  font-weight: 500;
 }

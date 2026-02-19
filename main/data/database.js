@@ -3,30 +3,21 @@ const { getDBPath, ensureAppDataDir } = require('../utils/paths');
 
 let db = null;
 
-/**
- * Get database connection (singleton)
- */
 function getDatabase() {
   if (!db) {
     ensureAppDataDir();
     db = new Database(getDBPath());
 
-    // Enable foreign keys
     db.pragma('foreign_keys = ON');
 
-    // Initialize schema
     initializeSchema();
 
-    // Run migrations
     runMigrations();
 
   }
   return db;
 }
 
-/**
- * Initialize database schema
- */
 function initializeSchema() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS folders (
@@ -85,38 +76,26 @@ function initializeSchema() {
   `);
 }
 
-/**
- * Check if a migration has been applied
- */
 function hasMigrationRun(migrationName) {
   try {
     const result = db.prepare('SELECT id FROM migrations WHERE name = ?').get(migrationName);
     return result !== undefined;
   } catch (error) {
-    // Migrations table doesn't exist yet
     return false;
   }
 }
 
-/**
- * Mark a migration as applied
- */
 function markMigrationApplied(migrationName) {
   const { v4: uuidv4 } = require('uuid');
   const id = uuidv4();
   db.prepare('INSERT INTO migrations (id, name) VALUES (?, ?)').run(id, migrationName);
 }
 
-/**
- * Run database migrations
- */
 function runMigrations() {
-  // Migration 0: Add active_worktree_id column to folders table (schema migration)
   const MIGRATION_ADD_WORKTREE_COLUMN = 'add_active_worktree_id_column';
 
   if (!hasMigrationRun(MIGRATION_ADD_WORKTREE_COLUMN)) {
     try {
-      // Check if column exists
       const tableInfo = db.pragma('table_info(folders)');
       const hasColumn = tableInfo.some(col => col.name === 'active_worktree_id');
 
@@ -127,23 +106,19 @@ function runMigrations() {
       markMigrationApplied(MIGRATION_ADD_WORKTREE_COLUMN);
     } catch (error) {
       console.error(`[Database] Migration failed: ${MIGRATION_ADD_WORKTREE_COLUMN}`, error);
-      // Don't mark as applied if it failed
-      return; // Stop further migrations
+      return;
     }
   }
 
-  // Migration 1: Fix worktree data after main repo detection fix (v2 - with schema fix)
   const MIGRATION_FIX_WORKTREES = 'fix_worktree_main_branch_detection_v2';
 
   if (!hasMigrationRun(MIGRATION_FIX_WORKTREES)) {
     try {
       const Worktree = require('./models/Worktree');
 
-      // Check if migration is needed (if there are any worktree entries)
       if (Worktree.needsMigration()) {
         const result = Worktree.migrateAllFolders();
 
-        // Only mark as applied if there were no errors
         if (result.errorCount === 0) {
           markMigrationApplied(MIGRATION_FIX_WORKTREES);
         } else {
@@ -154,11 +129,9 @@ function runMigrations() {
       }
     } catch (error) {
       console.error(`[Database] Migration failed: ${MIGRATION_FIX_WORKTREES}`, error);
-      // Don't mark as applied if it failed
     }
   }
 
-  // Migration 2: Add claude_session_id column to claude_sessions table
   const MIGRATION_ADD_CLAUDE_SESSION_ID = 'add_claude_session_id_to_claude_sessions';
 
   if (!hasMigrationRun(MIGRATION_ADD_CLAUDE_SESSION_ID)) {
@@ -176,7 +149,6 @@ function runMigrations() {
     }
   }
 
-  // Migration 3: Add messages column to claude_sessions table
   const MIGRATION_ADD_MESSAGES = 'add_messages_to_claude_sessions';
 
   if (!hasMigrationRun(MIGRATION_ADD_MESSAGES)) {
@@ -194,7 +166,6 @@ function runMigrations() {
     }
   }
 
-  // Migration 4: Add source column to claude_sessions table
   const MIGRATION_ADD_SOURCE = 'add_source_to_claude_sessions';
 
   if (!hasMigrationRun(MIGRATION_ADD_SOURCE)) {
@@ -212,7 +183,6 @@ function runMigrations() {
     }
   }
 
-  // Migration 5: Add name column to claude_sessions table
   const MIGRATION_ADD_NAME = 'add_name_to_claude_sessions';
 
   if (!hasMigrationRun(MIGRATION_ADD_NAME)) {
@@ -230,7 +200,6 @@ function runMigrations() {
     }
   }
 
-  // Migration 6: Add archived column to claude_sessions table
   const MIGRATION_ADD_ARCHIVED = 'add_archived_to_claude_sessions';
 
   if (!hasMigrationRun(MIGRATION_ADD_ARCHIVED)) {
@@ -248,7 +217,6 @@ function runMigrations() {
     }
   }
 
-  // Migration 7: Add last_active_at column to claude_sessions table
   const MIGRATION_ADD_LAST_ACTIVE = 'add_last_active_at_to_claude_sessions';
 
   if (!hasMigrationRun(MIGRATION_ADD_LAST_ACTIVE)) {
@@ -258,7 +226,6 @@ function runMigrations() {
 
       if (!hasColumn) {
         db.exec('ALTER TABLE claude_sessions ADD COLUMN last_active_at DATETIME');
-        // Backfill from created_at
         db.exec('UPDATE claude_sessions SET last_active_at = created_at WHERE last_active_at IS NULL');
       }
 
@@ -268,12 +235,10 @@ function runMigrations() {
     }
   }
 
-  // Migration 8: Deduplicate archived sessions (keep most recent per claude_session_id per worktree)
   const MIGRATION_DEDUP_ARCHIVED = 'deduplicate_archived_sessions';
 
   if (!hasMigrationRun(MIGRATION_DEDUP_ARCHIVED)) {
     try {
-      // Delete duplicate archived rows, keeping only the most recent per claude_session_id + worktree_id
       db.exec(`
         DELETE FROM claude_sessions
         WHERE rowid NOT IN (
@@ -290,7 +255,6 @@ function runMigrations() {
         AND claude_session_id IS NOT NULL
       `);
 
-      // Also set default name on existing sessions that have NULL name
       db.exec("UPDATE claude_sessions SET name = 'New Session' WHERE name IS NULL");
 
       markMigrationApplied(MIGRATION_DEDUP_ARCHIVED);
@@ -300,9 +264,6 @@ function runMigrations() {
   }
 }
 
-/**
- * Close database connection
- */
 function closeDatabase() {
   if (db) {
     db.close();

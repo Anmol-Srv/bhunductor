@@ -6,19 +6,23 @@ import MainContent from '../components/MainContent';
 import CreateBranchModal from '../components/CreateBranchModal';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
 import FilePanel from '../components/FilePanel';
+import SettingsModal from '../components/settings/SettingsModal';
 import useBranchStore from '../stores/branchStore';
 import useSessionStore from '../stores/sessionStore';
 import useUIStore from '../stores/uiStore';
+import useChecksStore from '../stores/checksStore';
 
 const EMPTY_ARRAY = [];
 
 function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoForward }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [openPR, setOpenPR] = useState(null);
 
   const { worktrees, activeWorktree, loading, initialize, loadWorktrees, createBranch, deleteBranch, selectBranch } = useBranchStore();
+  const fetchChecks = useChecksStore(s => s.fetchChecks);
   const { loadAllSessions, loadArchivedSessions, startSession, deleteSession, archiveSession, unarchiveAndResume, lazyResume, loadLastSession, pendingResumeSession, clearPendingResumeSession, sessionsByWorktree, archivedSessionsByWorktree, getMessages, setMessages, saveMessages, clearMessages } = useSessionStore();
-  const { setActiveFolder, openTab, closeTab, switchTab, sidebarCollapsed, toggleSidebar, filePanelCollapsed, toggleFilePanel } = useUIStore();
+  const { setActiveFolder, openTab, closeTab, switchTab, sidebarCollapsed, toggleSidebar, filePanelCollapsed, toggleFilePanel, settingsOpen } = useUIStore();
 
   // Subscribe to folder-specific tabs with shallow comparison to prevent infinite loops
   const { openTabs, activeTabId } = useUIStore(
@@ -30,6 +34,11 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
       };
     })
   );
+
+  // Clear PR badge when active worktree changes
+  useEffect(() => {
+    setOpenPR(null);
+  }, [activeWorktree?.id]);
 
   // Initialize worktrees and load sessions on mount
   useEffect(() => {
@@ -44,10 +53,41 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
         await loadAllSessions(folder.id, result.worktrees);
         if (result.activeWorktree) {
           await loadLastSession(folder.id, result.activeWorktree.id, result.activeWorktree.branch_name);
+          fetchChecks(folder.id, result.activeWorktree.id);
         }
       }
     })();
   }, [folder, setActiveFolder]);
+
+  // Adaptive polling for checks: 5s during fast-poll window (after git actions), 20s otherwise
+  useEffect(() => {
+    if (!folder || !activeWorktree) return;
+    const wtId = activeWorktree.id;
+    let timerId;
+
+    const schedulePoll = () => {
+      const isFast = useChecksStore.getState().isInFastPoll(wtId);
+      const delay = isFast ? 5000 : 20000;
+      timerId = setTimeout(() => {
+        fetchChecks(folder.id, wtId);
+        schedulePoll();
+      }, delay);
+    };
+
+    schedulePoll();
+    return () => clearTimeout(timerId);
+  }, [folder?.id, activeWorktree?.id]);
+
+  // Refresh checks immediately when Claude completes a turn (catches commit/push/PR creation)
+  useEffect(() => {
+    if (!folder || !activeWorktree) return;
+    const cleanup = window.electron.on('claude:turn-complete', (data) => {
+      if (data?.sessionId) {
+        fetchChecks(folder.id, activeWorktree.id);
+      }
+    });
+    return () => cleanup?.();
+  }, [folder?.id, activeWorktree?.id]);
 
   const handleCreateBranch = async (branchName) => {
     const result = await createBranch(folder.id, folder.path, branchName);
@@ -70,6 +110,7 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
 
   const handleSelectBranch = async (worktree) => {
     await selectBranch(folder.id, worktree);
+    fetchChecks(folder.id, worktree.id);
   };
 
   const handleStartSession = useCallback(async (worktreeId, claudeSessionId = null) => {
@@ -274,6 +315,7 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
         onGoForward={onGoForward}
         canGoBack={canGoBack}
         canGoForward={canGoForward}
+        openPR={openPR}
       />
 
       <div className="dashboard-content">
@@ -310,6 +352,11 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
           onToggle={toggleFilePanel}
           folderId={folder.id}
           worktreeId={activeWorktree?.id}
+          activeSessionId={(() => {
+            const tab = openTabs.find(t => (t.id || t.sessionId) === activeTabId);
+            return tab?.type !== 'file' ? (tab?.sessionId || null) : null;
+          })()}
+          onChecksUpdate={(checks) => setOpenPR(checks.openPR || null)}
           onOpenFile={handleOpenFile}
         />
       </div>
@@ -326,6 +373,8 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
         onConfirm={confirmDelete}
         onCancel={() => setDeleteConfirm(null)}
       />
+
+      {settingsOpen && <SettingsModal folderPath={folder?.path} />}
     </div>
   );
 }
