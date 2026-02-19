@@ -46,8 +46,13 @@ const ALLOWED_CHANNELS = [
   'file:read-content',
   'file:get-git-diff',
   'file:get-git-status',
+  'git:get-profile',
+  'git:get-config',
+  'git:get-log',
+  'git:get-checks',
   'app:get-version',
-  'app:quit'
+  'app:quit',
+  'app:open-external'
 ];
 
 /**

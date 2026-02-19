@@ -1,9 +1,10 @@
-const { ipcMain, dialog, app } = require('electron');
+const { ipcMain, dialog, app, shell } = require('electron');
 const { IPC_CHANNELS } = require('../../shared/constants');
 const FolderService = require('../services/FolderService');
 const BranchService = require('../services/BranchService');
 const SessionService = require('../services/SessionService');
 const FileService = require('../services/FileService');
+const GitService = require('../services/GitService');
 
 /**
  * Register all IPC handlers using domain services.
@@ -14,12 +15,14 @@ function registerIPC(mainWindow, configManager) {
   const branchService = new BranchService();
   const sessionService = new SessionService(mainWindow);
   const fileService = new FileService();
+  const gitService = new GitService();
 
   // Domain services register their own handlers
   folderService.registerHandlers(ipcMain, dialog);
   branchService.registerHandlers(ipcMain);
   sessionService.registerHandlers(ipcMain);
   fileService.registerHandlers(ipcMain);
+  gitService.registerHandlers(ipcMain);
 
   // Config handlers
   ipcMain.handle(IPC_CHANNELS.CONFIG_GET, (event, key) => {
@@ -48,6 +51,10 @@ function registerIPC(mainWindow, configManager) {
 
   ipcMain.handle(IPC_CHANNELS.APP_QUIT, () => {
     app.quit();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.APP_OPEN_EXTERNAL, (event, url) => {
+    shell.openExternal(url);
   });
 
   return sessionService;

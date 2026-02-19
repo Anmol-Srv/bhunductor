@@ -1,30 +1,33 @@
 /* Bhunductor — cold graphite, teal conductor */
 :root {
-  /* Surfaces — cool graphite, whisper-quiet elevation */
-  --surface-base: #09090b;
-  --surface-raised: #111114;
-  --surface-overlay: #18181c;
-  --surface-hover: #222228;
-  --surface-input: #141418;
+  /* Surfaces — cool graphite, perceptible elevation steps */
+  --surface-base: #08080a;
+  --surface-raised: #121215;
+  --surface-overlay: #1a1a1f;
+  --surface-hover: #242429;
+  --surface-input: #0e0e11;
 
   /* Conductor — muted teal, the through-line of authority */
   --conductor: #36B5AB;
   --conductor-rgb: 54, 181, 171;
   --conductor-hover: #2DA39A;
   --conductor-muted: rgba(54, 181, 171, 0.10);
+  --conductor-subtle: rgba(54, 181, 171, 0.05);
 
   /* Ink — text hierarchy */
   --ink: #e4e4e7;
   --ink-secondary: #a1a1aa;
   --ink-muted: #52525b;
+  --ink-faint: #3f3f46;
 
-  /* Edges — border hierarchy, barely visible structure */
+  /* Edges — border hierarchy */
   --edge: rgba(255, 255, 255, 0.06);
-  --edge-strong: rgba(255, 255, 255, 0.09);
+  --edge-strong: rgba(255, 255, 255, 0.10);
 
   /* Signals */
   --stream-live: #22c55e;
   --gate-deny: #ef4444;
+  --gate-deny-hover: #dc2626;
   --gate-caution: #d4a017;
 
   /* Shadows — dark mode, minimal */
@@ -37,17 +40,29 @@
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', Monaco, Consolas, monospace;
 
+  /* Type scale — distinct levels */
+  --text-xs: 10px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
   /* Spacing — 4px base */
   --spacing-xs: 4px;
   --spacing-sm: 8px;
   --spacing-md: 16px;
   --spacing-lg: 24px;
   --spacing-xl: 32px;
+  --spacing-2xl: 48px;
 
-  /* Radii — sharp, technical */
-  --radius-sm: 3px;
-  --radius-md: 5px;
-  --radius-lg: 6px;
+  /* Radii — distinct steps */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-full: 100px;
 
   /* Transitions */
   --transition-fast: 0.1s ease;

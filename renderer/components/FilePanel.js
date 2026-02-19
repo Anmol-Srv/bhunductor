@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FolderClosed, FolderOpen, ChevronRight, ChevronDown, RefreshCw, Files, GitCommit } from 'lucide-react';
+import { FolderClosed, FolderOpen, ChevronRight, ChevronDown, Files, GitCommit, CheckCircle2 } from 'lucide-react';
 import { getFileIcon } from '../utils/fileIcons';
+import ChecksPanel from './ChecksPanel';
 
-function FilePanel({ collapsed, onToggle, folderId, worktreeId, onOpenFile }) {
+function FilePanel({ collapsed, onToggle, folderId, worktreeId, activeSessionId, onChecksUpdate, onOpenFile }) {
   const [mode, setMode] = useState('files'); // 'files' | 'changes'
   const [treeData, setTreeData] = useState([]);
   const [changedFiles, setChangedFiles] = useState([]);
@@ -144,10 +145,12 @@ function FilePanel({ collapsed, onToggle, folderId, worktreeId, onOpenFile }) {
             Changes
             {changedFiles.length > 0 && <span className="file-panel-count">{changedFiles.length}</span>}
           </button>
-        </div>
-        <div className="file-panel-actions">
-          <button className="file-panel-action-btn" onClick={loadData} title="Refresh">
-            <RefreshCw size={14} />
+          <button
+            className={`file-panel-mode-btn ${mode === 'checks' ? 'active' : ''}`}
+            onClick={() => setMode('checks')}
+          >
+            <CheckCircle2 size={14} />
+            Checks
           </button>
         </div>
       </div>
@@ -169,6 +172,15 @@ function FilePanel({ collapsed, onToggle, folderId, worktreeId, onOpenFile }) {
               treeData.map(node => renderTreeNode(node, 0))
             )}
           </div>
+        )}
+
+        {mode === 'checks' && (
+          <ChecksPanel
+            folderId={folderId}
+            worktreeId={worktreeId}
+            activeSessionId={activeSessionId}
+            onChecksUpdate={onChecksUpdate}
+          />
         )}
 
         {!loading && !error && mode === 'changes' && (

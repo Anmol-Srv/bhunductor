@@ -49,7 +49,7 @@ function MainContent({ openTabs, activeTabId, onSwitchTab, onCloseTab, pendingRe
             </div>
           </div>
           <div className="tab-content">
-            <div className="tab-panel" style={{ display: 'flex' }}>
+            <div className="tab-panel">
               <ClaudeChat
                 sessionId={pendingResumeSession.sessionId}
                 isReadOnly={true}
@@ -66,9 +66,9 @@ function MainContent({ openTabs, activeTabId, onSwitchTab, onCloseTab, pendingRe
     return (
       <div className="main-content">
         <div className="empty-state">
-          <div className="empty-state-icon">&#9671;</div>
-          <h2>Start a Claude Session</h2>
-          <p>Select a branch in the sidebar and click "New session" to begin</p>
+          <div className="empty-state-icon">&#9657;</div>
+          <h2>New Session</h2>
+          <p>Select a branch and start a session to begin</p>
         </div>
       </div>
     );
@@ -137,7 +137,7 @@ function MainContent({ openTabs, activeTabId, onSwitchTab, onCloseTab, pendingRe
             <div
               key={key}
               className="tab-panel"
-              style={{ display: key === activeTabId ? 'flex' : 'none' }}
+              style={key !== activeTabId ? { display: 'none' } : undefined}
             >
               {tab.type === 'file' ? (
                 <FileViewer

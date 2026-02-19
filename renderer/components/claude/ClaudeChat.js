@@ -8,6 +8,7 @@ import TurnCostBadge from './TurnCostBadge';
 import PermissionPrompt from './PermissionPrompt';
 import StreamLoader from './StreamLoader';
 import AskUserQuestionBlock from './AskUserQuestionBlock';
+import InstructionCard from './InstructionCard';
 import WelcomeBanner from './WelcomeBanner';
 import useSessionStore from '../../stores/sessionStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -166,6 +167,15 @@ function ClaudeChat({
     switch (msg.type) {
       case 'text':
         if (msg.role === 'user') {
+          if (msg.isInstruction && msg.instructionMeta) {
+            return (
+              <InstructionCard
+                key={msg.id || idx}
+                text={msg.text}
+                meta={msg.instructionMeta}
+              />
+            );
+          }
           return (
             <div key={msg.id || idx} className="chat-user-msg">
               {msg.text}
