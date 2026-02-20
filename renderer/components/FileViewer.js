@@ -7,6 +7,10 @@ loader.config({ paths: { vs: './vs' } });
 // Module-level content cache — survives tab switches (same pattern as ClaudeChat)
 const contentCache = new Map();
 
+export function clearContentCache() {
+  contentCache.clear();
+}
+
 // Map file extension to Monaco language ID
 const LANG_MAP = {
   js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
@@ -66,13 +70,15 @@ function FileViewer({ filePath, relativePath, fileName, worktreeId, folderId, ha
     let cancelled = false;
 
     const loadContent = async () => {
-      // Check cache
-      const cached = contentCache.get(filePath);
-      if (cached) {
-        setContent(cached.content);
-        setDiffData(cached.diffData);
-        setLoading(false);
-        return;
+      // Check cache — skip for files with changes (always fetch fresh diff)
+      if (!hasChanges) {
+        const cached = contentCache.get(filePath);
+        if (cached) {
+          setContent(cached.content);
+          setDiffData(cached.diffData);
+          setLoading(false);
+          return;
+        }
       }
 
       setLoading(true);

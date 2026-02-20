@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { GitBranch, ChevronRight, ChevronDown, MoreVertical, Trash2, Plus, Archive } from 'lucide-react';
+import { GitBranch, GitMerge, ChevronRight, ChevronDown, MoreVertical, Trash2, Plus, Archive } from 'lucide-react';
 
 function formatRelativeTime(dateStr) {
   if (!dateStr) return '';
@@ -24,6 +24,7 @@ function BranchItem({
   openTabs,
   onSelect,
   onDelete,
+  onClose,
   onStartSession,
   onOpenSession,
   onDeleteSession,
@@ -179,6 +180,9 @@ function BranchItem({
         <GitBranch size={13} className="branch-icon" />
         <span className="branch-name">{worktree.branch_name}</span>
         {isMain && <span className="main-badge">main</span>}
+        {worktree.status === 'merged' && (
+          <span className="merged-badge" title="Merged"><GitMerge size={11} /></span>
+        )}
         {activeSessions.length > 0 && (
           <span className="session-count">{activeSessions.length}</span>
         )}
@@ -210,6 +214,16 @@ function BranchItem({
 
               {menuOpen && (
                 <div className="branch-menu">
+                  <button
+                    className="menu-item"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onClose();
+                    }}
+                  >
+                    <Archive size={14} />
+                    <span>Close Branch</span>
+                  </button>
                   <button
                     className="menu-item delete"
                     onClick={(e) => {

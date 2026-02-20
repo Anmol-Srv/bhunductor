@@ -29,7 +29,8 @@ class FileService {
         return {
           success: true,
           tree: treeResult.tree,
-          gitStatus: statusResult.success ? statusResult.files : []
+          gitStatus: statusResult.success ? statusResult.files : [],
+          worktreePath
         };
       } catch (error) {
         console.error('[FileService] Error getting file tree:', error);

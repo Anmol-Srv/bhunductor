@@ -169,6 +169,19 @@ class GitService {
           // gh not installed or no auth
         }
 
+        // Auto-update worktree status when merged PR is detected
+        let worktreeStatus = worktree.status || 'active';
+        if (mergedPR && worktreeStatus !== 'merged') {
+          try {
+            const { getDatabase } = require('../data/database');
+            const db = getDatabase();
+            db.prepare('UPDATE worktrees SET status = ? WHERE id = ?').run('merged', worktreeId);
+            worktreeStatus = 'merged';
+          } catch (err) {
+            console.error('[GitService] Failed to update worktree status:', err.message);
+          }
+        }
+
         return {
           success: true,
           branch: branch || null,
@@ -184,7 +197,8 @@ class GitService {
           lastCommitSubject,
           remoteUrl,
           openPR,
-          mergedPR
+          mergedPR,
+          worktreeStatus
         };
       } catch (error) {
         console.error('[GitService] Error getting checks:', error);

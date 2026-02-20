@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { Send, Square, AlertCircle, Copy, Check } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import ToolUseBlock from './ToolUseBlock';
@@ -13,6 +13,89 @@ import WelcomeBanner from './WelcomeBanner';
 import useSessionStore from '../../stores/sessionStore';
 import { useShallow } from 'zustand/react/shallow';
 
+const ActiveStreamBlock = memo(({ sessionId }) => {
+  const streamingMessage = useSessionStore(s => s.streamingState[sessionId]?.streamingMessage ?? '');
+
+  if (!streamingMessage) return null;
+
+  return (
+    <div className="chat-assistant-msg streaming">
+      <MarkdownRenderer content={streamingMessage} />
+      <span className="streaming-cursor" />
+    </div>
+  );
+});
+
+const ChatInputBox = memo(({
+  onSend,
+  onStop,
+  isStreaming,
+  isReadOnly,
+  placeholderText
+}) => {
+  const [input, setInput] = useState('');
+  const textareaRef = useRef(null);
+
+  const autoResize = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+  }, []);
+
+  useEffect(() => {
+    autoResize();
+  }, [input, autoResize]);
+
+  const handleSendMessage = () => {
+    if (!input.trim()) return;
+    onSend(input.trim());
+    setInput('');
+  };
+
+  return (
+    <div className="chat-input-area">
+      <div className="chat-input-box">
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.metaKey) {
+              e.preventDefault();
+              handleSendMessage();
+            }
+          }}
+          placeholder={placeholderText || "Ask to make changes, @mention files, run /commands"}
+          disabled={isStreaming && !isReadOnly}
+          rows={1}
+        />
+        <div className="chat-input-toolbar">
+          <div className="chat-input-toolbar-left" />
+          {isStreaming ? (
+            <button
+              className="chat-stop-btn"
+              onClick={onStop}
+              title="Stop generating"
+            >
+              <Square size={12} />
+            </button>
+          ) : (
+            <button
+              className="chat-send-btn"
+              onClick={handleSendMessage}
+              disabled={!input.trim()}
+            >
+              <Send size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+
 const EMPTY_ARRAY = [];
 
 function ClaudeChat({
@@ -25,19 +108,16 @@ function ClaudeChat({
   branchName = null,
   model = 'Opus 4.6'
 }) {
-  const [input, setInput] = useState('');
   const [copiedId, setCopiedId] = useState(null);
   const messagesEndRef = useRef(null);
-  const textareaRef = useRef(null);
   const chatFeedRef = useRef(null);
   const shouldAutoScrollRef = useRef(true);
 
   // Single shallow-compared subscription to avoid infinite re-render loops
-  const { _version, isStreaming, streamingMessage, permissionQueue } = useSessionStore(
+  const { _version, isStreaming, permissionQueue } = useSessionStore(
     useShallow(s => ({
       _version: s._messageCacheVersion,
       isStreaming: s.streamingState[sessionId]?.isStreaming ?? false,
-      streamingMessage: s.streamingState[sessionId]?.streamingMessage ?? '',
       permissionQueue: s.permissionQueues[sessionId] ?? EMPTY_ARRAY,
     }))
   );
@@ -66,14 +146,14 @@ function ClaudeChat({
         if (result?.success && result.messages && result.messages.length > 0) {
           useSessionStore.getState().setMessages(sessionId, result.messages);
         }
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }, [sessionId, isReadOnly]);
 
   // Persist messages to DB when they change (skip read-only)
   useEffect(() => {
     if (isReadOnly || messages.length === 0) return;
-    window.electron.invoke('claude:session-save-messages', sessionId, messages).catch(() => {});
+    window.electron.invoke('claude:session-save-messages', sessionId, messages).catch(() => { });
   }, [sessionId, _version, isReadOnly]);
 
   // Track scroll position to determine if we should auto-scroll
@@ -92,34 +172,32 @@ function ClaudeChat({
     return () => chatFeed.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Auto-scroll only if user is already near bottom
+  // Subscribe to streaming updates specifically for auto-scrolling
+  // This does not trigger ClaudeChat re-renders, just calls imperative scroll!
+  useEffect(() => {
+    const unsub = useSessionStore.subscribe(
+      (state) => state.streamingState[sessionId]?.streamingMessage,
+      (newMsg, oldMsg) => {
+        if (newMsg !== oldMsg && shouldAutoScrollRef.current) {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+        }
+      }
+    );
+    return unsub;
+  }, [sessionId]);
+
+  // Auto-scroll on normal _version changes (new messages)
   useEffect(() => {
     if (shouldAutoScrollRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [_version, streamingMessage]);
-
-  // Auto-resize textarea
-  const autoResize = useCallback(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
-  }, []);
-
-  useEffect(() => {
-    autoResize();
-  }, [input, autoResize]);
+  }, [_version]);
 
   const handleStopSession = useCallback(async () => {
     await useSessionStore.getState().stopSession(sessionId);
   }, [sessionId]);
 
-  const handleSendMessage = async () => {
-    if (!input.trim()) return;
-    const userMessage = input;
-    setInput('');
-
+  const handleSendMessage = async (userMessage) => {
     // Always auto-scroll when sending a new message
     shouldAutoScrollRef.current = true;
 
@@ -134,6 +212,7 @@ function ClaudeChat({
     updateMessages(sessionId, prev => [...prev, {
       id: crypto.randomUUID(), role: 'user', type: 'text', text: userMessage
     }]);
+
     const result = await sendMessage(sessionId, userMessage);
     if (!result.success) {
       updateMessages(sessionId, prev => [...prev, {
@@ -305,15 +384,14 @@ function ClaudeChat({
     return items;
   }, [messages]);
 
-  const showWelcome = !isReadOnly && messages.length === 0 && !isStreaming;
-
   return (
     <div className="claude-chat">
       <div className="chat-feed" ref={chatFeedRef}>
-        {showWelcome && (
+        {!isReadOnly && (
           <WelcomeBanner
             model={model}
             branchName={branchName}
+            folderName={folderName}
           />
         )}
 
@@ -338,14 +416,9 @@ function ClaudeChat({
 
           // If we're waiting for a response (either streaming or just sent a message)
           if (isWaitingForResponse) {
-            if (streamingMessage) {
-              // Text is streaming in — show it with cursor
-              return (
-                <div className="chat-assistant-msg streaming">
-                  <MarkdownRenderer content={streamingMessage} />
-                  <span className="streaming-cursor" />
-                </div>
-              );
+            // If genuinely streaming now, use the independent component
+            if (isStreaming) {
+              return <ActiveStreamBlock sessionId={sessionId} />;
             }
 
             if (hasActiveThinking || hasRunningTool) {
@@ -406,44 +479,13 @@ function ClaudeChat({
         />
       )}
 
-      <div className="chat-input-area">
-        <div className="chat-input-box">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && !e.metaKey) {
-                e.preventDefault();
-                handleSendMessage();
-              }
-            }}
-            placeholder={placeholderText || "Ask to make changes, @mention files, run /commands"}
-            disabled={isStreaming && !isReadOnly}
-            rows={1}
-          />
-          <div className="chat-input-toolbar">
-            <div className="chat-input-toolbar-left" />
-            {isStreaming ? (
-              <button
-                className="chat-stop-btn"
-                onClick={handleStopSession}
-                title="Stop generating"
-              >
-                <Square size={12} />
-              </button>
-            ) : (
-              <button
-                className="chat-send-btn"
-                onClick={handleSendMessage}
-                disabled={!input.trim()}
-              >
-                <Send size={14} />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
+      <ChatInputBox
+        onSend={handleSendMessage}
+        onStop={handleStopSession}
+        isStreaming={isStreaming}
+        isReadOnly={isReadOnly}
+        placeholderText={placeholderText}
+      />
     </div>
   );
 }

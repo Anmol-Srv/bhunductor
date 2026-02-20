@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 const useBranchStore = create((set, get) => ({
   worktrees: [],
+  closedWorktrees: [],
   activeWorktree: null,
   loading: false,
 
@@ -67,6 +68,40 @@ const useBranchStore = create((set, get) => ({
   selectBranch: async (folderId, worktree) => {
     set({ activeWorktree: worktree });
     await window.electron.invoke('worktree:set-active', folderId, worktree.id);
+  },
+
+  loadClosedWorktrees: async (folderId) => {
+    const result = await window.electron.invoke('worktree:list-closed', folderId);
+    if (result.success) {
+      set({ closedWorktrees: result.worktrees });
+    }
+    return result;
+  },
+
+  closeBranch: async (worktreeId, folderId) => {
+    const result = await window.electron.invoke('worktree:close', worktreeId);
+    if (result.success) {
+      const { activeWorktree, worktrees } = get();
+      await get().loadWorktrees(folderId);
+      await get().loadClosedWorktrees(folderId);
+      if (activeWorktree?.id === worktreeId) {
+        const mainBranch = worktrees.find(w => w.is_main === 1);
+        set({ activeWorktree: mainBranch });
+        if (mainBranch) {
+          await window.electron.invoke('worktree:set-active', folderId, mainBranch.id);
+        }
+      }
+    }
+    return result;
+  },
+
+  reopenBranch: async (worktreeId, folderId) => {
+    const result = await window.electron.invoke('worktree:reopen', worktreeId);
+    if (result.success) {
+      await get().loadWorktrees(folderId);
+      await get().loadClosedWorktrees(folderId);
+    }
+    return result;
   }
 }));
 
