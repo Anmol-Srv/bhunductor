@@ -17,7 +17,7 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-  const { worktrees, activeWorktree, loading, initialize, loadWorktrees, createBranch, deleteBranch, selectBranch } = useBranchStore();
+  const { worktrees, closedWorktrees, activeWorktree, loading, initialize, loadWorktrees, createBranch, deleteBranch, selectBranch, closeBranch, reopenBranch, loadClosedWorktrees } = useBranchStore();
   const fetchChecks = useChecksStore(s => s.fetchChecks);
   const { loadAllSessions, loadArchivedSessions, startSession, deleteSession, archiveSession, unarchiveAndResume, lazyResume, loadLastSession, pendingResumeSession, clearPendingResumeSession, sessionsByWorktree, archivedSessionsByWorktree, getMessages, setMessages, saveMessages, clearMessages } = useSessionStore();
   const { setActiveFolder, openTab, closeTab, switchTab, sidebarCollapsed, toggleSidebar, filePanelCollapsed, toggleFilePanel, settingsOpen } = useUIStore();
@@ -43,11 +43,12 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
     (async () => {
       const result = await initialize(folder);
       if (result) {
-        await loadAllSessions(folder.id, result.worktrees);
+        const tasks = [loadAllSessions(folder.id, result.worktrees), loadClosedWorktrees(folder.id)];
         if (result.activeWorktree) {
-          await loadLastSession(folder.id, result.activeWorktree.id, result.activeWorktree.branch_name);
-          fetchChecks(folder.id, result.activeWorktree.id);
+          tasks.push(loadLastSession(folder.id, result.activeWorktree.id, result.activeWorktree.branch_name));
+          tasks.push(fetchChecks(folder.id, result.activeWorktree.id));
         }
+        await Promise.all(tasks);
       }
     })();
   }, [folder, setActiveFolder]);
@@ -99,6 +100,20 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
       alert(`Failed to delete branch: ${result.error}`);
     }
     setDeleteConfirm(null);
+  };
+
+  const handleCloseBranch = async (worktreeId) => {
+    const result = await closeBranch(worktreeId, folder.id);
+    if (!result.success) {
+      alert(`Failed to close branch: ${result.error}`);
+    }
+  };
+
+  const handleReopenBranch = async (worktreeId) => {
+    const result = await reopenBranch(worktreeId, folder.id);
+    if (!result.success) {
+      alert(`Failed to reopen branch: ${result.error}`);
+    }
   };
 
   const handleSelectBranch = async (worktree) => {
@@ -308,6 +323,9 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
         onSelectBranch={handleSelectBranch}
         onCreateBranch={() => setShowCreateModal(true)}
         onDeleteBranch={handleDeleteBranch}
+        onCloseBranch={handleCloseBranch}
+        onReopenBranch={handleReopenBranch}
+        closedWorktrees={closedWorktrees}
         onStartSession={handleStartSession}
         onOpenSession={handleOpenSession}
         onDeleteSession={handleDeleteSession}
@@ -332,6 +350,8 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
         onCloseTab={handleCloseTab}
         pendingResumeSession={pendingResumeSession}
         onLazyResume={handleLazyResume}
+        onStartSession={handleStartSession}
+        activeWorktree={activeWorktree}
       />
 
       <FilePanel

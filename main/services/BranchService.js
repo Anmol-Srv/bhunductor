@@ -61,6 +61,36 @@ class BranchService {
       }
     });
 
+    ipcMain.handle(IPC_CHANNELS.WORKTREE_CLOSE, async (event, worktreeId) => {
+      try {
+        Worktree.closeBranch(worktreeId);
+        return { success: true };
+      } catch (error) {
+        console.error('[BranchService] Error closing branch:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle(IPC_CHANNELS.WORKTREE_REOPEN, async (event, worktreeId) => {
+      try {
+        Worktree.reopenBranch(worktreeId);
+        return { success: true };
+      } catch (error) {
+        console.error('[BranchService] Error reopening branch:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle(IPC_CHANNELS.WORKTREE_LIST_CLOSED, async (event, folderId) => {
+      try {
+        const worktrees = Worktree.listClosedWorktrees(folderId);
+        return { success: true, worktrees };
+      } catch (error) {
+        console.error('[BranchService] Error listing closed worktrees:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
     ipcMain.handle(IPC_CHANNELS.WORKTREE_CLEANUP, async (event, folderId, folderPath) => {
       try {
         const result = Worktree.cleanupAndReinitialize(folderId, folderPath);

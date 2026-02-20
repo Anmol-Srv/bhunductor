@@ -55,18 +55,35 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  // Initialize config manager
+  console.time('[Main] startup-total');
+
+  // Initialize config manager (needed for window dimensions)
+  console.time('[Main] config-init');
   configManager = new ConfigManager();
+  console.timeEnd('[Main] config-init');
 
-  // Initialize database and run cleanup
-  getDatabase();
-  Folder.cleanupInvalid();
-
-  // Create window
+  // Create window first — user sees UI immediately
+  console.time('[Main] create-window');
   createWindow();
+  console.timeEnd('[Main] create-window');
+
+  // Initialize database
+  console.time('[Main] database-init');
+  getDatabase();
+  console.timeEnd('[Main] database-init');
 
   // Register IPC handlers (after window creation for Claude integration)
+  console.time('[Main] ipc-register');
   sessionService = registerIPC(mainWindow, configManager);
+  console.timeEnd('[Main] ipc-register');
+
+  // Defer cleanup — non-blocking, runs after event loop settles
+  setImmediate(() => {
+    console.time('[Main] folder-cleanup');
+    Folder.cleanupInvalid();
+    console.timeEnd('[Main] folder-cleanup');
+    console.timeEnd('[Main] startup-total');
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

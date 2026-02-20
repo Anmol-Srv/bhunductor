@@ -75,10 +75,10 @@ function ChecksPanel({ folderId, worktreeId, activeSessionId, onChecksUpdate }) 
 
   const {
     branch, defaultBranch, uncommittedCount, unpushedCount,
-    isMainBranch, openPR
+    isMainBranch, openPR, mergedPR
   } = checks;
   const noSession = !activeSessionId;
-  const showPR = !openPR && !isMainBranch;
+  const showPR = !openPR && !isMainBranch && !mergedPR;
 
   const items = [];
 
@@ -136,8 +136,28 @@ function ChecksPanel({ folderId, worktreeId, activeSessionId, onChecksUpdate }) 
     );
   }
 
+  if (mergedPR) {
+    items.push(
+      <CheckItem
+        key="merged"
+        icon={GitMerge}
+        iconClass="check-icon-merged"
+        label={`PR #${mergedPR.number} merged`}
+        sublabel={mergedPR.title}
+      />
+    );
+  }
+
   return (
     <div className="checks-panel">
+      {/* Post-merge guidance */}
+      {mergedPR && (
+        <div className="post-merge-actions">
+          <div className="post-merge-title">Branch merged — next steps:</div>
+          <div className="post-merge-hint">Switch to <strong>{defaultBranch}</strong> and pull, or delete this branch.</div>
+        </div>
+      )}
+
       {/* PR metadata inputs — visible when Create PR action is available */}
       {showPR && (
         <div className="checks-pr-form">

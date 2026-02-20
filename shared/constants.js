@@ -16,6 +16,9 @@ const IPC_CHANNELS = {
   WORKTREE_VALIDATE_NAME: 'worktree:validate-name',
   WORKTREE_SET_ACTIVE: 'worktree:set-active',
   WORKTREE_CLEANUP: 'worktree:cleanup',
+  WORKTREE_CLOSE: 'worktree:close',
+  WORKTREE_REOPEN: 'worktree:reopen',
+  WORKTREE_LIST_CLOSED: 'worktree:list-closed',
 
   CLAUDE_SESSION_START: 'claude:session-start',
   CLAUDE_SESSION_STOP: 'claude:session-stop',

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, GitBranch, Plus } from 'lucide-react';
 import ClaudeChat from './claude/ClaudeChat';
 import FileViewer from './FileViewer';
 import useSessionStore from '../stores/sessionStore';
@@ -8,8 +8,31 @@ import { getFileIcon } from '../utils/fileIcons';
 /** Get the canonical tab key */
 const tabKey = (t) => t.id || t.sessionId;
 
-function MainContent({ folderName, openTabs, activeTabId, onSwitchTab, onCloseTab, pendingResumeSession, onLazyResume }) {
+function formatSessionCost(costUsd) {
+  if (!costUsd || costUsd === 0) return null;
+  if (costUsd < 0.01) return `$${costUsd.toFixed(4)}`;
+  return `$${costUsd.toFixed(2)}`;
+}
+
+function MainContent({ folderName, openTabs, activeTabId, onSwitchTab, onCloseTab, pendingResumeSession, onLazyResume, onStartSession, activeWorktree }) {
   const [closeConfirm, setCloseConfirm] = useState(null);
+
+  // Subscribe to message cache version to re-derive cost on updates
+  const cacheVersion = useSessionStore(s => s._messageCacheVersion);
+
+  // Compute total cost for the active session tab
+  const activeTab = openTabs.find(t => tabKey(t) === activeTabId);
+  const activeSessionId = activeTab?.type !== 'file' ? activeTab?.sessionId : null;
+
+  const sessionCost = useMemo(() => {
+    if (!activeSessionId) return null;
+    const messages = useSessionStore.getState().getMessages(activeSessionId);
+    let total = 0;
+    for (const msg of messages) {
+      if (msg.type === 'result' && msg.costUsd) total += msg.costUsd;
+    }
+    return total;
+  }, [activeSessionId, cacheVersion]);
 
   // Escape to dismiss close-tab confirm
   useEffect(() => {
@@ -66,15 +89,32 @@ function MainContent({ folderName, openTabs, activeTabId, onSwitchTab, onCloseTa
       );
     }
 
+    const branchName = activeWorktree?.branch_name;
+    const canStart = !!activeWorktree && !!onStartSession;
+
     return (
       <div className="main-content">
         <div className="main-content-titlebar">
           <span className="main-content-repo-name">{folderName}</span>
         </div>
         <div className="empty-state">
-          <div className="empty-state-icon">&#9657;</div>
-          <h2>New Session</h2>
-          <p>Select a branch and start a session to begin</p>
+          {branchName && (
+            <div className="empty-state-branch">
+              <GitBranch size={11} />
+              <span>{branchName}</span>
+            </div>
+          )}
+
+          <button
+            className="empty-state-start-btn"
+            onClick={() => canStart && onStartSession(activeWorktree.id)}
+            disabled={!canStart}
+          >
+            <Plus size={14} />
+            <span>New Session</span>
+          </button>
+
+          <span className="empty-state-hint">&#8984;N</span>
         </div>
       </div>
     );
@@ -102,10 +142,15 @@ function MainContent({ folderName, openTabs, activeTabId, onSwitchTab, onCloseTa
     setCloseConfirm(null);
   };
 
+  const formattedCost = formatSessionCost(sessionCost);
+
   return (
     <div className="main-content">
       <div className="main-content-titlebar">
         <span className="main-content-repo-name">{folderName}</span>
+        {formattedCost && (
+          <span className="session-cost-badge">{formattedCost}</span>
+        )}
       </div>
       {/* Tab bar */}
       <div className="tab-bar">

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Settings, Home, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Settings, Home, ChevronLeft, ChevronRight, ChevronDown, Archive, RotateCcw, GitBranch } from 'lucide-react';
 import BranchItem from './BranchItem';
 import useUIStore from '../stores/uiStore';
 
@@ -11,6 +11,9 @@ function Sidebar({
   onSelectBranch,
   onCreateBranch,
   onDeleteBranch,
+  onCloseBranch,
+  onReopenBranch,
+  closedWorktrees,
   onStartSession,
   onOpenSession,
   onDeleteSession,
@@ -27,6 +30,7 @@ function Sidebar({
   canGoForward
 }) {
   const [menuOpen, setMenuOpen] = useState(null);
+  const [closedExpanded, setClosedExpanded] = useState(false);
 
   return (
     <div className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
@@ -71,6 +75,7 @@ function Sidebar({
                 openTabs={openTabs || []}
                 onSelect={() => onSelectBranch(worktree)}
                 onDelete={() => onDeleteBranch(worktree.id, worktree.branch_name)}
+                onClose={() => onCloseBranch(worktree.id)}
                 onStartSession={onStartSession}
                 onOpenSession={onOpenSession}
                 onDeleteSession={onDeleteSession}
@@ -82,6 +87,47 @@ function Sidebar({
               />
             ))}
             </div>
+
+            {closedWorktrees && closedWorktrees.length > 0 && (
+              <div className="closed-branches-section">
+                <button
+                  className="closed-branches-toggle"
+                  onClick={() => setClosedExpanded(!closedExpanded)}
+                >
+                  <span className="closed-branches-chevron">
+                    {closedExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                  </span>
+                  <Archive size={12} className="closed-branches-icon" />
+                  <span className="closed-branches-label">Closed</span>
+                  <span className="closed-branches-count">{closedWorktrees.length}</span>
+                </button>
+                {closedExpanded && (
+                  <div className="closed-branches-list">
+                    {closedWorktrees.map(worktree => (
+                      <div
+                        key={worktree.id}
+                        className="closed-branch-item"
+                        onClick={() => onReopenBranch(worktree.id)}
+                        title={`${worktree.branch_name} — click to reopen`}
+                      >
+                        <GitBranch size={12} className="closed-branch-icon" />
+                        <span className="closed-branch-name">{worktree.branch_name}</span>
+                        <button
+                          className="closed-branch-reopen-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onReopenBranch(worktree.id);
+                          }}
+                          title="Reopen branch"
+                        >
+                          <RotateCcw size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

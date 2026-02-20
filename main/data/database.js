@@ -262,6 +262,124 @@ function runMigrations() {
       console.error(`[Database] Migration failed: ${MIGRATION_DEDUP_ARCHIVED}`, error);
     }
   }
+
+  const MIGRATION_ADD_WORKTREE_STATUS = 'add_status_to_worktrees';
+
+  if (!hasMigrationRun(MIGRATION_ADD_WORKTREE_STATUS)) {
+    try {
+      const tableInfo = db.pragma('table_info(worktrees)');
+      const hasColumn = tableInfo.some(col => col.name === 'status');
+
+      if (!hasColumn) {
+        db.exec("ALTER TABLE worktrees ADD COLUMN status TEXT DEFAULT 'active'");
+      }
+
+      markMigrationApplied(MIGRATION_ADD_WORKTREE_STATUS);
+    } catch (error) {
+      console.error(`[Database] Migration failed: ${MIGRATION_ADD_WORKTREE_STATUS}`, error);
+    }
+  }
+
+  const MIGRATION_RELOCATE_WORKTREES = 'relocate_worktrees_to_app_data';
+
+  if (!hasMigrationRun(MIGRATION_RELOCATE_WORKTREES)) {
+    try {
+      const path = require('path');
+      const fs = require('fs');
+      const { execSync } = require('child_process');
+      const { getAppDataDir } = require('../utils/paths');
+
+      const appDataDir = getAppDataDir();
+      const worktrees = db.prepare(
+        "SELECT w.id, w.folder_id, w.branch_name, w.worktree_path, f.path as folder_path FROM worktrees w JOIN folders f ON w.folder_id = f.id WHERE w.is_main = 0 AND w.worktree_path IS NOT NULL"
+      ).all();
+
+      let migrated = 0;
+      let skipped = 0;
+
+      for (const wt of worktrees) {
+        const oldPath = wt.worktree_path;
+        const newDir = path.join(appDataDir, 'worktrees', wt.folder_id);
+        const newPath = path.join(newDir, wt.branch_name.replace(/\//g, '-'));
+
+        // Already at new location
+        if (oldPath.startsWith(appDataDir)) {
+          skipped++;
+          continue;
+        }
+
+        // Ensure destination directory exists
+        if (!fs.existsSync(newDir)) {
+          fs.mkdirSync(newDir, { recursive: true });
+        }
+
+        let moved = false;
+
+        // Only attempt move if old path exists
+        if (fs.existsSync(oldPath)) {
+          try {
+            // Try git worktree move (git >= 2.17)
+            execSync(`git worktree move "${oldPath}" "${newPath}"`, {
+              cwd: wt.folder_path,
+              stdio: 'pipe',
+              encoding: 'utf-8',
+              timeout: 15000
+            });
+            moved = true;
+          } catch (moveErr) {
+            // Fallback: remove old worktree and re-add at new location
+            console.warn(`[Database] git worktree move failed for ${wt.branch_name}, using remove+add fallback:`, moveErr.message);
+            try {
+              execSync(`git worktree remove "${oldPath}" --force`, {
+                cwd: wt.folder_path, stdio: 'pipe', timeout: 10000
+              });
+              execSync(`git worktree add "${newPath}" "${wt.branch_name}"`, {
+                cwd: wt.folder_path, stdio: 'pipe', timeout: 15000
+              });
+              moved = true;
+            } catch (fallbackErr) {
+              console.error(`[Database] Fallback failed for ${wt.branch_name}:`, fallbackErr.message);
+            }
+          }
+        } else {
+          // Old path doesn't exist (orphaned entry) — try to re-create at new location
+          try {
+            execSync(`git worktree add "${newPath}" "${wt.branch_name}"`, {
+              cwd: wt.folder_path, stdio: 'pipe', timeout: 15000
+            });
+            moved = true;
+          } catch (recreateErr) {
+            console.warn(`[Database] Could not re-create worktree for ${wt.branch_name}:`, recreateErr.message);
+          }
+        }
+
+        if (moved) {
+          db.prepare('UPDATE worktrees SET worktree_path = ? WHERE id = ?').run(newPath, wt.id);
+          migrated++;
+        }
+      }
+
+      // Clean up empty .bhunductor directories in repos
+      const folders = db.prepare('SELECT DISTINCT path FROM folders').all();
+      for (const f of folders) {
+        const bhunductorDir = path.join(f.path, '.bhunductor');
+        if (fs.existsSync(bhunductorDir)) {
+          try {
+            // Only remove if empty (or contains only empty subdirs)
+            fs.rmSync(bhunductorDir, { recursive: true, force: true });
+            console.log(`[Database] Cleaned up ${bhunductorDir}`);
+          } catch {
+            // Directory might have other contents — leave it
+          }
+        }
+      }
+
+      console.log(`[Database] Worktree relocation: ${migrated} migrated, ${skipped} already at target`);
+      markMigrationApplied(MIGRATION_RELOCATE_WORKTREES);
+    } catch (error) {
+      console.error(`[Database] Migration failed: ${MIGRATION_RELOCATE_WORKTREES}`, error);
+    }
+  }
 }
 
 function closeDatabase() {

@@ -227,9 +227,7 @@ const useSessionStore = create((set, get) => ({
     return result;
   },
   loadAllSessions: async (folderId, worktreeList) => {
-    for (const wt of worktreeList) {
-      await get().loadSessions(folderId, wt.id);
-    }
+    await Promise.all(worktreeList.map(wt => get().loadSessions(folderId, wt.id)));
   },
   loadArchivedSessions: async (folderId, worktreeId) => {
     const result = await window.electron.invoke('claude:session-list-archived', folderId, worktreeId);

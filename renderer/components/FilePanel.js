@@ -5,6 +5,7 @@ import ChecksPanel from './ChecksPanel';
 import useChecksStore from '../stores/checksStore';
 import useSessionStore from '../stores/sessionStore';
 import { buildMergePRInstructions } from '../../shared/instructionTemplates';
+import { clearContentCache } from './FileViewer';
 
 function FilePanel({ collapsed, onToggle, folderId, worktreeId, activeSessionId, onChecksUpdate, onOpenFile }) {
   const [mode, setMode] = useState('files'); // 'files' | 'changes'
@@ -15,6 +16,7 @@ function FilePanel({ collapsed, onToggle, folderId, worktreeId, activeSessionId,
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [merging, setMerging] = useState(false);
+  const [worktreePath, setWorktreePath] = useState(null);
 
   const { checksByWorktree, fetchChecks, setPostActionRefresh } = useChecksStore();
   const sendInstruction = useSessionStore(s => s.sendInstruction);
@@ -56,6 +58,7 @@ function FilePanel({ collapsed, onToggle, folderId, worktreeId, activeSessionId,
         (result.gitStatus || []).forEach(f => { statusMap[f.path] = f.status; });
         setGitStatusMap(statusMap);
         setChangedFiles(result.gitStatus || []);
+        if (result.worktreePath) setWorktreePath(result.worktreePath);
       } else {
         setError(result.error || 'Failed to load file tree');
       }
@@ -68,6 +71,15 @@ function FilePanel({ collapsed, onToggle, folderId, worktreeId, activeSessionId,
 
   useEffect(() => {
     loadData();
+  }, [loadData]);
+
+  // Auto-refresh file tree and git status when Claude completes a turn
+  useEffect(() => {
+    const cleanup = window.electron.on('claude:turn-complete', () => {
+      clearContentCache();
+      loadData();
+    });
+    return cleanup;
   }, [loadData]);
 
   const toggleExpand = (path) => {
@@ -93,7 +105,7 @@ function FilePanel({ collapsed, onToggle, folderId, worktreeId, activeSessionId,
 
   const handleChangedFileClick = (file) => {
     onOpenFile({
-      filePath: file.path, // relative — we'll resolve in the viewer
+      filePath: worktreePath ? `${worktreePath}/${file.path}` : file.path,
       relativePath: file.path,
       fileName: file.path.split('/').pop(),
       hasChanges: true,

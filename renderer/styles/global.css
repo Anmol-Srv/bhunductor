@@ -450,6 +450,17 @@ pre,
   white-space: nowrap;
 }
 
+.session-cost-badge {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: #d4a017;
+  background: rgba(212, 160, 23, 0.08);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  -webkit-app-region: no-drag;
+}
+
 
 .placeholder {
   color: var(--ink-muted);
@@ -488,7 +499,6 @@ pre,
 /* Collapsible branch container */
 .branch-item-container {
   margin-bottom: 1px;
-  overflow: hidden;
 }
 
 .branch-header {
@@ -551,8 +561,8 @@ pre,
   gap: var(--spacing-xs);
   padding: 6px var(--spacing-sm);
   cursor: pointer;
-  font-size: var(--text-sm);
-  color: var(--ink-secondary);
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
   border-radius: var(--radius-xs);
   transition: background-color var(--transition-fast);
 }
@@ -665,6 +675,111 @@ pre,
   font-style: italic;
 }
 
+/* Closed branches section in sidebar */
+.closed-branches-section {
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-xs);
+  border-top: 1px solid var(--edge);
+}
+
+.closed-branches-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  transition: background-color var(--transition-fast);
+}
+
+.closed-branches-toggle:hover {
+  background-color: var(--surface-overlay);
+}
+
+.closed-branches-chevron {
+  display: flex;
+  align-items: center;
+  color: var(--ink-muted);
+  flex-shrink: 0;
+}
+
+.closed-branches-icon {
+  color: var(--ink-muted);
+  flex-shrink: 0;
+}
+
+.closed-branches-label {
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+.closed-branches-count {
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  margin-left: auto;
+}
+
+.closed-branches-list {
+  padding-left: 6px;
+}
+
+.closed-branch-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 5px var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.closed-branch-item:hover {
+  background-color: var(--surface-overlay);
+}
+
+.closed-branch-icon {
+  color: var(--ink-muted);
+  flex-shrink: 0;
+}
+
+.closed-branch-name {
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.closed-branch-reopen-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-xs);
+  opacity: 0;
+  transition: opacity var(--transition-fast), color var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.closed-branch-item:hover .closed-branch-reopen-btn {
+  opacity: 1;
+}
+
+.closed-branch-reopen-btn:hover {
+  color: var(--ink-primary);
+}
+
 .session-status-badge {
   font-size: 9px;
   padding: 1px 5px;
@@ -745,8 +860,8 @@ pre,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--text-base);
-  font-weight: 400;
+  font-size: var(--text-md);
+  font-weight: 500;
 }
 
 .main-badge {
@@ -757,6 +872,13 @@ pre,
   border-radius: var(--radius-xs);
   font-weight: 500;
   letter-spacing: 0.3px;
+}
+
+.merged-badge {
+  color: #a371f7;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .branch-actions {
@@ -1210,35 +1332,97 @@ pre,
 }
 
 /* ========================================
-   Welcome Banner (minimal session init)
+   Bhunductor Logo
+   ======================================== */
+@keyframes bhunductorDotIn {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.bhunductor-logo {
+  display: block;
+  flex-shrink: 0;
+}
+
+/* ========================================
+   Welcome Banner — subdued session init
    ======================================== */
 .welcome-banner {
-  padding: var(--spacing-sm) var(--spacing-lg);
-  border-bottom: 1px solid var(--edge);
-}
-
-.welcome-text {
-  font-size: var(--text-sm);
-  color: var(--ink-muted);
-  font-family: var(--font-mono);
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: var(--spacing-md) var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
+  background-color: #1e1e1e;
+  /* Like a classic IDE code background tint */
+  border-bottom: 1px solid var(--edge-strong);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--ink-secondary);
+  animation: bannerFadeIn 0.5s ease-out;
 }
 
-.welcome-model {
-  color: var(--ink-secondary);
+@keyframes bannerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.welcome-banner-logo-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--conductor);
+  margin-right: var(--spacing-sm);
+}
+
+.welcome-banner-text {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.welcome-banner-highlight {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--conductor);
   font-weight: 500;
 }
 
-.welcome-separator {
+.welcome-banner-sep {
   color: var(--ink-faint);
+  margin: 0 var(--spacing-sm);
+  user-select: none;
 }
 
-.welcome-branch {
-  color: var(--ink-muted);
-  font-weight: 400;
+.welcome-banner-context {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
 }
+
+.welcome-banner-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink-muted);
+}
+
 
 /* User message — right-aligned, conductor-tinted */
 .chat-user-msg {
@@ -1253,15 +1437,20 @@ pre,
   white-space: pre-wrap;
   word-wrap: break-word;
   margin: var(--spacing-md) var(--spacing-lg) var(--spacing-sm);
+
+  /* Perf optimizations for long chat feeds */
+  content-visibility: auto;
+  contain-intrinsic-size: 80px;
+  transform: translateZ(0);
 }
 
 /* Assistant response block (wraps text + footer) */
 .chat-assistant-block {
   position: relative;
-}
-
-.chat-assistant-block:hover .chat-response-footer {
-  opacity: 1;
+  /* Perf optimizations for long chat feeds */
+  content-visibility: auto;
+  contain-intrinsic-size: 300px;
+  transform: translateZ(0);
 }
 
 /* Assistant text — clean, padded */
@@ -1278,8 +1467,6 @@ pre,
   align-items: center;
   justify-content: space-between;
   padding: 0 var(--spacing-lg) var(--spacing-xs);
-  opacity: 0;
-  transition: opacity var(--transition-fast);
 }
 
 .chat-response-meta {
@@ -1657,36 +1844,49 @@ pre,
   align-items: center;
   justify-content: center;
   flex: 1;
-  color: var(--ink-muted);
-  gap: var(--spacing-xs);
+  gap: var(--spacing-md);
   padding: var(--spacing-xl);
 }
 
-.empty-state-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
-  background: var(--conductor-muted);
-  display: flex;
+.empty-state-branch {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  color: var(--conductor);
-  margin-bottom: var(--spacing-sm);
-  font-size: var(--text-xl);
-  line-height: 1;
-}
-
-.empty-state h2 {
-  margin: 0 0 var(--spacing-xs) 0;
-  font-size: var(--text-md);
-  font-weight: 500;
-  color: var(--ink-secondary);
-}
-
-.empty-state p {
-  margin: 0;
-  font-size: var(--text-base);
+  gap: 5px;
   color: var(--ink-muted);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+}
+
+.empty-state-start-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--surface-overlay);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius-md);
+  color: var(--ink-secondary);
+  font-size: var(--text-base);
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.empty-state-start-btn:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+.empty-state-start-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.empty-state-hint {
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+  font-family: var(--font-sans);
 }
 
 /* Permission Bar — strip above input */
@@ -3253,6 +3453,29 @@ pre,
 .checks-refresh:hover {
   color: var(--ink-secondary);
   background: var(--surface-hover);
+}
+
+.post-merge-actions {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: rgba(163, 113, 247, 0.06);
+  border-bottom: 1px solid rgba(163, 113, 247, 0.15);
+}
+
+.post-merge-title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: #a371f7;
+  margin-bottom: 4px;
+}
+
+.post-merge-hint {
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  line-height: 1.4;
+}
+
+.post-merge-hint strong {
+  color: var(--ink-secondary);
 }
 
 /* ========================================

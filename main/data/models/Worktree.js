@@ -3,6 +3,7 @@ const fs = require('fs');
 const { execSync } = require('child_process');
 const { v4: uuidv4 } = require('uuid');
 const { getDatabase } = require('../database');
+const { getAppDataDir } = require('../../utils/paths');
 
 class Worktree {
   /**
@@ -159,10 +160,10 @@ class Worktree {
   }
 
   /**
-   * Get the worktrees directory path
+   * Get the worktrees directory path — stored under ~/.bhunductor/worktrees/{folderId}/
    */
-  static getWorktreesDir(folderPath) {
-    const worktreesDir = path.join(folderPath, '.bhunductor', 'worktrees');
+  static getWorktreesDir(folderId) {
+    const worktreesDir = path.join(getAppDataDir(), 'worktrees', folderId);
 
     // Create if not exists
     if (!fs.existsSync(worktreesDir)) {
@@ -270,8 +271,8 @@ class Worktree {
       throw new Error(`Branch ${branchName} already exists`);
     }
 
-    // Generate worktree path (relative to main repo)
-    const worktreesDir = this.getWorktreesDir(mainRepoPath);
+    // Generate worktree path under ~/.bhunductor/worktrees/{folderId}/
+    const worktreesDir = this.getWorktreesDir(folderId);
     const worktreePath = path.join(worktreesDir, branchName.replace(/\//g, '-'));
 
     // Check if path already exists
@@ -331,11 +332,52 @@ class Worktree {
     const db = getDatabase();
     const stmt = db.prepare(`
       SELECT * FROM worktrees
-      WHERE folder_id = ?
+      WHERE folder_id = ? AND (status IS NULL OR status != 'closed')
       ORDER BY is_main DESC, created_at ASC
     `);
 
     return stmt.all(folderId);
+  }
+
+  /**
+   * List closed worktrees for a folder
+   */
+  static listClosedWorktrees(folderId) {
+    const db = getDatabase();
+    const stmt = db.prepare(`
+      SELECT * FROM worktrees
+      WHERE folder_id = ? AND status = 'closed'
+      ORDER BY created_at ASC
+    `);
+
+    return stmt.all(folderId);
+  }
+
+  /**
+   * Close a branch (soft-hide from main list)
+   */
+  static closeBranch(worktreeId) {
+    const worktree = this.findById(worktreeId);
+    if (!worktree) throw new Error('Worktree not found');
+    if (worktree.is_main === 1) throw new Error('Cannot close the main branch');
+
+    const db = getDatabase();
+    const stmt = db.prepare('UPDATE worktrees SET status = ? WHERE id = ?');
+    stmt.run('closed', worktreeId);
+    return { success: true };
+  }
+
+  /**
+   * Reopen a closed branch
+   */
+  static reopenBranch(worktreeId) {
+    const worktree = this.findById(worktreeId);
+    if (!worktree) throw new Error('Worktree not found');
+
+    const db = getDatabase();
+    const stmt = db.prepare('UPDATE worktrees SET status = ? WHERE id = ?');
+    stmt.run('active', worktreeId);
+    return { success: true };
   }
 
   /**
@@ -460,6 +502,16 @@ class Worktree {
       // Get main repo path in case folderPath is a worktree
       const repoInfo = this.getMainRepoPath(folderPath);
       const mainRepoPath = repoInfo.mainPath;
+
+      // Clean up worktree files at the new ~/.bhunductor/worktrees/{folderId}/ location
+      const worktreesDir = path.join(getAppDataDir(), 'worktrees', folderId);
+      if (fs.existsSync(worktreesDir)) {
+        try {
+          fs.rmSync(worktreesDir, { recursive: true, force: true });
+        } catch (err) {
+          console.error('[Worktree] Error cleaning up worktrees dir:', err);
+        }
+      }
 
       // Delete all existing worktree entries for this folder
       const deleteStmt = db.prepare('DELETE FROM worktrees WHERE folder_id = ?');
