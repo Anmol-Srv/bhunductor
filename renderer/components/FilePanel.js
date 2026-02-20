@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FolderClosed, FolderOpen, ChevronRight, ChevronDown, Files, GitCommit, CheckCircle2 } from 'lucide-react';
+import { FolderClosed, FolderOpen, ChevronRight, ChevronDown, Files, GitCommit, CheckCircle2, GitPullRequest, GitMerge, ExternalLink, Loader } from 'lucide-react';
 import { getFileIcon } from '../utils/fileIcons';
 import ChecksPanel from './ChecksPanel';
+import useChecksStore from '../stores/checksStore';
+import useSessionStore from '../stores/sessionStore';
+import { buildMergePRInstructions } from '../../shared/instructionTemplates';
 
 function FilePanel({ collapsed, onToggle, folderId, worktreeId, activeSessionId, onChecksUpdate, onOpenFile }) {
   const [mode, setMode] = useState('files'); // 'files' | 'changes'
@@ -11,6 +14,33 @@ function FilePanel({ collapsed, onToggle, folderId, worktreeId, activeSessionId,
   const [expandedPaths, setExpandedPaths] = useState(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [merging, setMerging] = useState(false);
+
+  const { checksByWorktree, fetchChecks, setPostActionRefresh } = useChecksStore();
+  const sendInstruction = useSessionStore(s => s.sendInstruction);
+  const checks = checksByWorktree[worktreeId] || null;
+  const openPR = checks?.openPR || null;
+  const mergedPR = checks?.mergedPR || null;
+
+  const handleMergePR = async () => {
+    if (!activeSessionId || !checks) return;
+    setMerging(true);
+    try {
+      await fetchChecks(folderId, worktreeId);
+      await sendInstruction(activeSessionId, buildMergePRInstructions(checks), {
+        action: 'merge-pr', label: 'Merge PR', fileName: 'Merge instructions.md'
+      });
+      setPostActionRefresh(worktreeId);
+    } finally {
+      setMerging(false);
+    }
+  };
+
+  const handleOpenPRLink = () => {
+    if (openPR?.url) {
+      window.electron.invoke('app:open-external', openPR.url);
+    }
+  };
 
   const loadData = useCallback(async () => {
     if (!folderId || !worktreeId) return;
@@ -128,6 +158,37 @@ function FilePanel({ collapsed, onToggle, folderId, worktreeId, activeSessionId,
 
   return (
     <div className="file-panel">
+      {openPR && (
+        <div className="pr-merge-banner">
+          <div className="pr-merge-banner-left">
+            <button className="pr-badge-link" onClick={handleOpenPRLink} title={openPR.title}>
+              PR #{openPR.number}
+            </button>
+            <span className="pr-merge-status">Ready to merge</span>
+          </div>
+          <button
+            className="pr-merge-btn"
+            onClick={handleMergePR}
+            disabled={merging || !activeSessionId}
+            title={!activeSessionId ? 'Start a session to merge' : 'Merge this PR'}
+          >
+            {merging ? <Loader size={13} className="spinner" /> : <GitPullRequest size={13} />}
+            {merging ? 'Merging...' : 'Merge'}
+          </button>
+        </div>
+      )}
+      {!openPR && mergedPR && (
+        <div className="pr-merge-banner pr-merged-banner">
+          <div className="pr-merge-banner-left">
+            <button className="pr-badge-link pr-badge-merged" onClick={() => {
+              if (mergedPR.url) window.electron.invoke('app:open-external', mergedPR.url);
+            }} title={mergedPR.title}>
+              <GitMerge size={12} /> PR #{mergedPR.number} <ExternalLink size={11} />
+            </button>
+            <span className="pr-merged-status">Merged</span>
+          </div>
+        </div>
+      )}
       <div className="file-panel-header">
         <div className="file-panel-modes">
           <button

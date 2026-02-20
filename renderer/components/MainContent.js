@@ -8,7 +8,7 @@ import { getFileIcon } from '../utils/fileIcons';
 /** Get the canonical tab key */
 const tabKey = (t) => t.id || t.sessionId;
 
-function MainContent({ openTabs, activeTabId, onSwitchTab, onCloseTab, pendingResumeSession, onLazyResume }) {
+function MainContent({ folderName, openTabs, activeTabId, onSwitchTab, onCloseTab, pendingResumeSession, onLazyResume }) {
   const [closeConfirm, setCloseConfirm] = useState(null);
 
   // Escape to dismiss close-tab confirm
@@ -32,6 +32,9 @@ function MainContent({ openTabs, activeTabId, onSwitchTab, onCloseTab, pendingRe
 
       return (
         <div className="main-content">
+          <div className="main-content-titlebar">
+            <span className="main-content-repo-name">{folderName}</span>
+          </div>
           <div className="tab-bar">
             <div
               className="tab-item active"
@@ -65,6 +68,9 @@ function MainContent({ openTabs, activeTabId, onSwitchTab, onCloseTab, pendingRe
 
     return (
       <div className="main-content">
+        <div className="main-content-titlebar">
+          <span className="main-content-repo-name">{folderName}</span>
+        </div>
         <div className="empty-state">
           <div className="empty-state-icon">&#9657;</div>
           <h2>New Session</h2>
@@ -98,6 +104,9 @@ function MainContent({ openTabs, activeTabId, onSwitchTab, onCloseTab, pendingRe
 
   return (
     <div className="main-content">
+      <div className="main-content-titlebar">
+        <span className="main-content-repo-name">{folderName}</span>
+      </div>
       {/* Tab bar */}
       <div className="tab-bar">
         {openTabs.map(tab => {

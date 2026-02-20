@@ -74,9 +74,8 @@ function ChecksPanel({ folderId, worktreeId, activeSessionId, onChecksUpdate }) 
   }
 
   const {
-    branch, defaultBranch, uncommittedCount, hasUpstream, unpushedCount,
-    isMainBranch, openPR, stagedCount, unstagedCount, untrackedCount,
-    lastCommitSubject
+    branch, defaultBranch, uncommittedCount, unpushedCount,
+    isMainBranch, openPR
   } = checks;
   const noSession = !activeSessionId;
   const showPR = !openPR && !isMainBranch;

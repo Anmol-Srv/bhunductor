@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Settings, Home, ChevronLeft, ChevronRight } from 'lucide-react';
 import BranchItem from './BranchItem';
+import useUIStore from '../stores/uiStore';
 
 function Sidebar({
   collapsed,
@@ -18,12 +19,31 @@ function Sidebar({
   onLoadArchivedSessions,
   sessionsByWorktree,
   archivedSessionsByWorktree,
-  openTabs
+  openTabs,
+  onGoHome,
+  onGoBack,
+  onGoForward,
+  canGoBack,
+  canGoForward
 }) {
   const [menuOpen, setMenuOpen] = useState(null);
 
   return (
     <div className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
+      <div className="sidebar-titlebar">
+        <div className="sidebar-nav">
+          <button className="nav-btn" onClick={onGoBack} disabled={!canGoBack} title="Go back">
+            <ChevronLeft size={16} />
+          </button>
+          <button className="nav-btn" onClick={onGoForward} disabled={!canGoForward} title="Go forward">
+            <ChevronRight size={16} />
+          </button>
+          <button className="nav-btn" onClick={onGoHome} title="Go home">
+            <Home size={14} />
+          </button>
+        </div>
+      </div>
+
       {!collapsed && (
         <div className="sidebar-content">
           <div className="sidebar-section">
@@ -66,6 +86,16 @@ function Sidebar({
         </div>
       )}
 
+      <div className="sidebar-footer">
+        <button
+          className="sidebar-settings-btn"
+          onClick={() => useUIStore.getState().toggleSettings()}
+          title="Settings"
+        >
+          <Settings size={14} />
+          {!collapsed && 'Settings'}
+        </button>
+      </div>
     </div>
   );
 }

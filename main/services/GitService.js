@@ -150,11 +150,20 @@ class GitService {
 
         // Open PR via gh CLI
         let openPR = null;
+        let mergedPR = null;
         try {
           const prJson = this._exec(`gh pr list --head "${branch}" --state open --json number,title,url --limit 1`, repoPath);
           if (prJson) {
             const prs = JSON.parse(prJson);
             if (prs.length > 0) openPR = prs[0];
+          }
+          // If no open PR, check for merged PR on this branch
+          if (!openPR && !isMainBranch) {
+            const mergedJson = this._exec(`gh pr list --head "${branch}" --state merged --json number,title,url --limit 1`, repoPath);
+            if (mergedJson) {
+              const merged = JSON.parse(mergedJson);
+              if (merged.length > 0) mergedPR = merged[0];
+            }
           }
         } catch {
           // gh not installed or no auth
@@ -174,7 +183,8 @@ class GitService {
           behindCount,
           lastCommitSubject,
           remoteUrl,
-          openPR
+          openPR,
+          mergedPR
         };
       } catch (error) {
         console.error('[GitService] Error getting checks:', error);

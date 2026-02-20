@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import MainContent from '../components/MainContent';
 import CreateBranchModal from '../components/CreateBranchModal';
@@ -17,7 +16,6 @@ const EMPTY_ARRAY = [];
 function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoForward }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [openPR, setOpenPR] = useState(null);
 
   const { worktrees, activeWorktree, loading, initialize, loadWorktrees, createBranch, deleteBranch, selectBranch } = useBranchStore();
   const fetchChecks = useChecksStore(s => s.fetchChecks);
@@ -34,11 +32,6 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
       };
     })
   );
-
-  // Clear PR badge when active worktree changes
-  useEffect(() => {
-    setOpenPR(null);
-  }, [activeWorktree?.id]);
 
   // Initialize worktrees and load sessions on mount
   useEffect(() => {
@@ -307,59 +300,52 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
 
   return (
     <div className="dashboard">
-      <Header
-        folderName={folder?.name || 'Unknown'}
-        folderPath={folder?.path || ''}
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        onToggle={toggleSidebar}
+        worktrees={worktrees}
+        activeWorktree={activeWorktree}
+        onSelectBranch={handleSelectBranch}
+        onCreateBranch={() => setShowCreateModal(true)}
+        onDeleteBranch={handleDeleteBranch}
+        onStartSession={handleStartSession}
+        onOpenSession={handleOpenSession}
+        onDeleteSession={handleDeleteSession}
+        onArchiveSession={handleArchiveSession}
+        onUnarchiveAndResume={handleUnarchiveAndResume}
+        onLoadArchivedSessions={handleLoadArchived}
+        sessionsByWorktree={sessionsByWorktree}
+        archivedSessionsByWorktree={archivedSessionsByWorktree}
+        openTabs={openTabs}
         onGoHome={onGoHome}
         onGoBack={onGoBack}
         onGoForward={onGoForward}
         canGoBack={canGoBack}
         canGoForward={canGoForward}
-        openPR={openPR}
       />
 
-      <div className="dashboard-content">
-        <Sidebar
-          collapsed={sidebarCollapsed}
-          onToggle={toggleSidebar}
-          worktrees={worktrees}
-          activeWorktree={activeWorktree}
-          onSelectBranch={handleSelectBranch}
-          onCreateBranch={() => setShowCreateModal(true)}
-          onDeleteBranch={handleDeleteBranch}
-          onStartSession={handleStartSession}
-          onOpenSession={handleOpenSession}
-          onDeleteSession={handleDeleteSession}
-          onArchiveSession={handleArchiveSession}
-          onUnarchiveAndResume={handleUnarchiveAndResume}
-          onLoadArchivedSessions={handleLoadArchived}
-          sessionsByWorktree={sessionsByWorktree}
-          archivedSessionsByWorktree={archivedSessionsByWorktree}
-          openTabs={openTabs}
-        />
+      <MainContent
+        folderName={folder.name}
+        openTabs={openTabs}
+        activeTabId={activeTabId}
+        onSwitchTab={switchTab}
+        onCloseTab={handleCloseTab}
+        pendingResumeSession={pendingResumeSession}
+        onLazyResume={handleLazyResume}
+      />
 
-        <MainContent
-          openTabs={openTabs}
-          activeTabId={activeTabId}
-          onSwitchTab={switchTab}
-          onCloseTab={handleCloseTab}
-          pendingResumeSession={pendingResumeSession}
-          onLazyResume={handleLazyResume}
-        />
-
-        <FilePanel
-          collapsed={filePanelCollapsed}
-          onToggle={toggleFilePanel}
-          folderId={folder.id}
-          worktreeId={activeWorktree?.id}
-          activeSessionId={(() => {
-            const tab = openTabs.find(t => (t.id || t.sessionId) === activeTabId);
-            return tab?.type !== 'file' ? (tab?.sessionId || null) : null;
-          })()}
-          onChecksUpdate={(checks) => setOpenPR(checks.openPR || null)}
-          onOpenFile={handleOpenFile}
-        />
-      </div>
+      <FilePanel
+        collapsed={filePanelCollapsed}
+        onToggle={toggleFilePanel}
+        folderId={folder.id}
+        worktreeId={activeWorktree?.id}
+        activeSessionId={(() => {
+          const tab = openTabs.find(t => (t.id || t.sessionId) === activeTabId);
+          return tab?.type !== 'file' ? (tab?.sessionId || null) : null;
+        })()}
+        onChecksUpdate={() => {}}
+        onOpenFile={handleOpenFile}
+      />
 
       <CreateBranchModal
         isOpen={showCreateModal}

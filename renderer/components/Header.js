@@ -1,11 +1,10 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight, Home, Settings, GitPullRequest } from 'lucide-react';
-import useUIStore from '../stores/uiStore';
+import { ChevronLeft, ChevronRight, Home, GitPullRequest, GitMerge } from 'lucide-react';
 
-function Header({ folderName, folderPath, onGoHome, onGoBack, onGoForward, canGoBack, canGoForward, openPR }) {
-  const handleOpenPR = () => {
-    if (openPR?.url) {
-      window.electron.invoke('app:open-external', openPR.url);
+function Header({ folderName, folderPath, onGoHome, onGoBack, onGoForward, canGoBack, canGoForward, openPR, mergedPR }) {
+  const handleOpenPR = (pr) => {
+    if (pr?.url) {
+      window.electron.invoke('app:open-external', pr.url);
     }
   };
 
@@ -32,19 +31,18 @@ function Header({ folderName, folderPath, onGoHome, onGoBack, onGoForward, canGo
       <div className="header-spacer"></div>
 
       {openPR && (
-        <button className="header-pr-badge" onClick={handleOpenPR} title={openPR.title}>
+        <button className="header-pr-badge" onClick={() => handleOpenPR(openPR)} title={openPR.title}>
           <GitPullRequest size={13} />
           PR #{openPR.number}
         </button>
       )}
 
-      <button
-        className="nav-btn settings-btn"
-        onClick={() => useUIStore.getState().toggleSettings()}
-        title="Settings"
-      >
-        <Settings size={16} />
-      </button>
+      {!openPR && mergedPR && (
+        <button className="header-pr-badge header-pr-badge-merged" onClick={() => handleOpenPR(mergedPR)} title={mergedPR.title}>
+          <GitMerge size={13} />
+          PR #{mergedPR.number}
+        </button>
+      )}
     </div>
   );
 }
