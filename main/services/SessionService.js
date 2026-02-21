@@ -3,8 +3,12 @@ const { getDatabase } = require('../data/database');
 const Worktree = require('../data/models/Worktree');
 const Folder = require('../data/models/Folder');
 const ClaudeProcess = require('../claude/ClaudeProcess');
+const SDKSession = require('../claude/SDKSession');
 const PermissionHttpServer = require('../mcp/PermissionHttpServer');
 const { IPC_CHANNELS } = require('../../shared/constants');
+
+// Feature flag: set to true to use the Agent SDK instead of raw CLI subprocess
+const USE_SDK = true;
 
 class SessionService {
   constructor(mainWindow) {
@@ -12,21 +16,24 @@ class SessionService {
     this.activeSessions = new Map();
     this.pendingPermissions = new Map();
     this.historyBuffer = new Map();
-    this.hiddenToolUseIds = new Set(); // Track tool_use_ids for hidden MCP tools
+    this.hiddenToolUseIds = new Set();
+    this.useSDK = USE_SDK;
 
     this.cleanupStaleSessions();
 
-    // Start MCP permission HTTP server on OS-assigned port
-    this.permissionServer = new PermissionHttpServer(0);
-    this.permissionServer.onPermissionRequest = (requestId, permissionData) => {
-      this.handleMcpPermissionRequest(requestId, permissionData);
-    };
-    this.permissionServer.onRenameSession = (sessionId, title) => {
-      return this.handleSessionRename(sessionId, title);
-    };
-    this.permissionServer.start().then(() => {
-      this.permissionPort = this.permissionServer.getPort();
-    }).catch(() => {});
+    if (!this.useSDK) {
+      // Legacy: Start MCP permission HTTP server on OS-assigned port
+      this.permissionServer = new PermissionHttpServer(0);
+      this.permissionServer.onPermissionRequest = (requestId, permissionData) => {
+        this.handleMcpPermissionRequest(requestId, permissionData);
+      };
+      this.permissionServer.onRenameSession = (sessionId, title) => {
+        return this.handleSessionRename(sessionId, title);
+      };
+      this.permissionServer.start().then(() => {
+        this.permissionPort = this.permissionServer.getPort();
+      }).catch(() => {});
+    }
   }
 
   registerHandlers(ipcMain) {
@@ -34,7 +41,6 @@ class SessionService {
       try {
         let sessionData;
         if (claudeSessionId) {
-          // Find existing row to reactivate
           const db = getDatabase();
           const existingRow = db.prepare(`
             SELECT id FROM claude_sessions
@@ -217,54 +223,15 @@ class SessionService {
     });
   }
 
+  // ─── Cleanup ─────────────────────────────────────────────────────
+
   cleanupStaleSessions() {
     const db = getDatabase();
     db.prepare("UPDATE claude_sessions SET status = 'stopped' WHERE status = 'active'").run();
-    // Clear any stale pending permissions from previous app instance
     this.pendingPermissions.clear();
   }
 
-  handleMcpPermissionRequest(requestId, permissionData) {
-    // Auto-approve certain low-risk tools without showing permission prompt
-    const autoApprovedTools = [
-      'mcp__bhunductor-permissions__rename_session',
-      'rename_session'
-    ];
-
-    const toolName = permissionData.tool || permissionData.tool_name || '';
-    if (autoApprovedTools.some(t => toolName.includes(t) || toolName === t)) {
-      // Immediately approve without showing UI prompt
-      setImmediate(() => {
-        this.permissionServer.respondToPermission(requestId, true);
-      });
-      return;
-    }
-
-    // For other tools, show permission prompt to user
-    try {
-      if (!this.mainWindow.isDestroyed()) {
-        this.mainWindow.webContents.send('claude:permission-request', {
-          requestId,
-          ...permissionData
-        });
-      }
-    } catch {}
-
-    this.pendingPermissions.set(requestId, {
-      isMcp: true,
-      toolUseId: permissionData.tool_use_id,
-      sessionId: permissionData.session_id,
-      input: permissionData.input,
-      createdAt: Date.now()
-    });
-  }
-
-  handleSessionRename(sessionId, title) {
-    if (!sessionId || !title) {
-      throw new Error('Session ID and title are required');
-    }
-    this.renameSession(sessionId, title);
-  }
+  // ─── Session Creation ────────────────────────────────────────────
 
   createSession(folderId, worktreeId) {
     const sessionId = uuidv4();
@@ -280,17 +247,18 @@ class SessionService {
 
     const workingDir = Worktree.getActivePath(worktree, folder);
 
-    const options = {};
-
-    // Pass the actual permission server port to the CLI process
-    if (this.permissionPort) {
-      options.permissionPort = this.permissionPort;
+    if (this.useSDK) {
+      const session = this._createSDKSession(sessionId, workingDir, {});
+      this.activeSessions.set(sessionId, session);
+    } else {
+      const options = {};
+      if (this.permissionPort) {
+        options.permissionPort = this.permissionPort;
+      }
+      const claudeProcess = this._spawnProcess(sessionId, workingDir, false, options);
+      claudeProcess.start();
+      this.activeSessions.set(sessionId, claudeProcess);
     }
-
-    const claudeProcess = this._spawnProcess(sessionId, workingDir, false, options);
-
-    claudeProcess.start();
-    this.activeSessions.set(sessionId, claudeProcess);
 
     db.prepare(`
       INSERT INTO claude_sessions (id, folder_id, worktree_id, status, name, claude_session_id, source, last_active_at)
@@ -364,21 +332,22 @@ class SessionService {
       this.historyBuffer.set(existingSessionId, previousMessages);
     }
 
-    const options = {};
-    // IMPORTANT: Don't use --resume or --session-id for stopped/exited sessions
-    // This prevents "Session ID already in use" errors and stale permission hangs
-    // Let the CLI generate a fresh session ID on reactivation
-    // We'll update claude_session_id in the DB when we receive the system event
-    options.skipSessionId = true;  // Tell _spawnProcess to not pass --session-id
-
-    if (this.permissionPort) {
-      options.permissionPort = this.permissionPort;
+    if (this.useSDK) {
+      // SDK: set claudeSessionId for resume via query() options
+      const session = this._createSDKSession(existingSessionId, workingDir, {
+        claudeSessionId: row.claude_session_id
+      });
+      this.activeSessions.set(existingSessionId, session);
+    } else {
+      const options = {};
+      options.skipSessionId = true;
+      if (this.permissionPort) {
+        options.permissionPort = this.permissionPort;
+      }
+      const claudeProcess = this._spawnProcess(existingSessionId, workingDir, hasPreloadedMessages, options);
+      claudeProcess.start();
+      this.activeSessions.set(existingSessionId, claudeProcess);
     }
-
-    const claudeProcess = this._spawnProcess(existingSessionId, workingDir, hasPreloadedMessages, options);
-
-    claudeProcess.start();
-    this.activeSessions.set(existingSessionId, claudeProcess);
 
     // Auto-archive other stopped/exited sessions on this worktree
     let archivedSessionIds = [];
@@ -417,8 +386,124 @@ class SessionService {
     };
   }
 
+  // ─── SDK Session Factory ─────────────────────────────────────────
+
+  _createSDKSession(sessionId, workingDir, options) {
+    const hiddenTools = [
+      'rename_session',
+      'mcp__bhunductor__rename_session'
+    ];
+
+    const isHiddenTool = (toolName) => {
+      return hiddenTools.some(t => toolName === t || toolName.includes(t));
+    };
+
+    return new SDKSession(sessionId, workingDir, {
+      onChunk: (data) => {
+        this.send('claude:message-chunk', data);
+      },
+      onComplete: (data) => {
+        this.send('claude:message-complete', data);
+      },
+      onError: (data) => {
+        this.send('claude:session-error', data);
+      },
+      onExit: (code) => {
+        this.handleSessionExit(sessionId, code);
+      },
+      onSystemInfo: ({ sessionId: sid, claudeSessionId: csid }) => {
+        this.handleSystemInfo(sid, csid);
+      },
+      onToolUse: (data) => {
+        if (data.toolName && isHiddenTool(data.toolName)) {
+          if (data.toolUseId) {
+            this.hiddenToolUseIds.add(data.toolUseId);
+          }
+          return;
+        }
+        this.send('claude:tool-use', data);
+      },
+      onToolResult: (data) => {
+        if (data.toolUseId && this.hiddenToolUseIds.has(data.toolUseId)) {
+          this.hiddenToolUseIds.delete(data.toolUseId);
+          return;
+        }
+        this.send('claude:tool-result', data);
+      },
+      onThinking: (data) => {
+        this.send('claude:thinking', data);
+      },
+      onTurnComplete: (data) => {
+        this.send('claude:turn-complete', data);
+        const turnDb = getDatabase();
+        turnDb.prepare('UPDATE claude_sessions SET last_active_at = CURRENT_TIMESTAMP WHERE id = ?').run(sessionId);
+      },
+      onRename: (sid, title) => {
+        this.renameSession(sid, title);
+      }
+    }, {
+      ...options,
+      permissionHandler: (sid, toolName, input, signal) => {
+        return this._sdkPermissionHandler(sid, toolName, input, signal);
+      }
+    });
+  }
+
+  /**
+   * Permission handler for SDK canUseTool callback.
+   * Returns a Promise that resolves when the user responds via IPC.
+   */
+  _sdkPermissionHandler(sessionId, toolName, input, signal) {
+    return new Promise((resolve, reject) => {
+      const requestId = uuidv4();
+
+      // Timeout after 5 minutes
+      const timeoutId = setTimeout(() => {
+        this.pendingPermissions.delete(requestId);
+        resolve({ behavior: 'deny', message: 'Permission request timed out' });
+      }, 300000);
+
+      // Clean up if query is aborted
+      const onAbort = () => {
+        clearTimeout(timeoutId);
+        this.pendingPermissions.delete(requestId);
+        resolve({ behavior: 'deny', message: 'Session aborted' });
+      };
+      if (signal) {
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+
+      this.pendingPermissions.set(requestId, {
+        isSDK: true,
+        resolve: (result) => {
+          clearTimeout(timeoutId);
+          if (signal) signal.removeEventListener('abort', onAbort);
+          this.pendingPermissions.delete(requestId);
+          resolve(result);
+        },
+        input, // Store original input for updatedInput in allow response
+        sessionId,
+        createdAt: Date.now()
+      });
+
+      // Send permission request to renderer (same IPC event shape)
+      try {
+        if (!this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('claude:permission-request', {
+            requestId,
+            tool: toolName,
+            input: input,
+            session_id: sessionId,
+            tool_use_id: requestId
+          });
+        }
+      } catch {}
+    });
+  }
+
+  // ─── Legacy CLI Process Factory ──────────────────────────────────
+
   _spawnProcess(sessionId, workingDir, hasPreloadedMessages, options) {
-    // List of tools that should execute silently without showing in chat UI
     const hiddenTools = [
       'rename_session',
       'mcp__bhunductor-permissions__rename_session'
@@ -450,9 +535,7 @@ class SessionService {
         this.send('claude:conversation-history', data);
       },
       onToolUse: (data) => {
-        // Filter out hidden MCP tools from chat display
         if (data.toolName && isHiddenTool(data.toolName)) {
-          // Track this tool_use_id so we can filter its result too
           if (data.toolUseId) {
             this.hiddenToolUseIds.add(data.toolUseId);
           }
@@ -461,9 +544,7 @@ class SessionService {
         this.send('claude:tool-use', data);
       },
       onToolResult: (data) => {
-        // Filter out results from hidden MCP tools
         if (data.toolUseId && this.hiddenToolUseIds.has(data.toolUseId)) {
-          // Clean up the tracked ID
           this.hiddenToolUseIds.delete(data.toolUseId);
           return;
         }
@@ -480,6 +561,8 @@ class SessionService {
     }, options);
   }
 
+  // ─── IPC Helpers ─────────────────────────────────────────────────
+
   send(channel, data) {
     try {
       if (!this.mainWindow.isDestroyed()) {
@@ -494,12 +577,124 @@ class SessionService {
     if (row?.claude_session_id !== claudeSessionId) {
       db.prepare('UPDATE claude_sessions SET claude_session_id = ? WHERE id = ?').run(claudeSessionId, sessionId);
     }
+    // Update the SDK session's claudeSessionId for future resume
+    const session = this.activeSessions.get(sessionId);
+    if (session && this.useSDK) {
+      session.claudeSessionId = claudeSessionId;
+    }
   }
+
+  // ─── Legacy MCP Permission Handling ──────────────────────────────
+
+  handleMcpPermissionRequest(requestId, permissionData) {
+    const autoApprovedTools = [
+      'mcp__bhunductor-permissions__rename_session',
+      'rename_session'
+    ];
+
+    const toolName = permissionData.tool || permissionData.tool_name || '';
+    if (autoApprovedTools.some(t => toolName.includes(t) || toolName === t)) {
+      setImmediate(() => {
+        this.permissionServer.respondToPermission(requestId, true);
+      });
+      return;
+    }
+
+    try {
+      if (!this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send('claude:permission-request', {
+          requestId,
+          ...permissionData
+        });
+      }
+    } catch {}
+
+    this.pendingPermissions.set(requestId, {
+      isMcp: true,
+      toolUseId: permissionData.tool_use_id,
+      sessionId: permissionData.session_id,
+      input: permissionData.input,
+      createdAt: Date.now()
+    });
+  }
+
+  handleSessionRename(sessionId, title) {
+    if (!sessionId || !title) {
+      throw new Error('Session ID and title are required');
+    }
+    this.renameSession(sessionId, title);
+  }
+
+  // ─── Session Operations ──────────────────────────────────────────
+
+  sendMessage(sessionId, message) {
+    const session = this.activeSessions.get(sessionId);
+    if (!session) {
+      throw new Error(`Session ${sessionId} not found`);
+    }
+
+    if (this.useSDK) {
+      // SDK: fire-and-forget the query. Callbacks stream results back.
+      session.runQuery(message).catch((err) => {
+        console.error('[SessionService] SDK query error:', err.message);
+      });
+    } else {
+      session.sendMessage(message);
+    }
+  }
+
+  respondToPermission(requestId, approved, message) {
+    const pending = this.pendingPermissions.get(requestId);
+    if (!pending) {
+      throw new Error(`Permission request ${requestId} not found`);
+    }
+
+    if (pending.isSDK) {
+      // SDK path: resolve the Promise from canUseTool callback
+      if (approved) {
+        pending.resolve({ behavior: 'allow', updatedInput: pending.input || {} });
+      } else {
+        pending.resolve({
+          behavior: 'deny',
+          message: message || 'User denied permission'
+        });
+      }
+    } else {
+      // Legacy: forward to HTTP permission server
+      this.permissionServer.respondToPermission(requestId, approved, message);
+      this.pendingPermissions.delete(requestId);
+    }
+  }
+
+  stopSession(sessionId) {
+    const session = this.activeSessions.get(sessionId);
+    if (session) {
+      session.stop();
+      this.activeSessions.delete(sessionId);
+      this.historyBuffer.delete(sessionId);
+      const db = getDatabase();
+      db.prepare("UPDATE claude_sessions SET status = 'stopped', last_active_at = CURRENT_TIMESTAMP WHERE id = ?").run(sessionId);
+
+      if (this.useSDK) {
+        // SDK sessions don't have a process exit event, so notify the renderer directly
+        this.send('claude:session-exited', { sessionId, code: 0 });
+      }
+      // For legacy mode, the process exit handler will send session-exited
+    }
+  }
+
+  handleSessionExit(sessionId, code) {
+    this.activeSessions.delete(sessionId);
+    this.historyBuffer.delete(sessionId);
+    this.send('claude:session-exited', { sessionId, code });
+    const db = getDatabase();
+    db.prepare("UPDATE claude_sessions SET status = 'exited', last_active_at = CURRENT_TIMESTAMP WHERE id = ?").run(sessionId);
+  }
+
+  // ─── Session Data Operations ─────────────────────────────────────
 
   getSessionHistory(sessionId) {
     const messages = this.historyBuffer.get(sessionId) || null;
-    // Don't delete - persist for multiple reads
-    // Will be cleaned up when session stops/exits
     return messages;
   }
 
@@ -558,23 +753,11 @@ class SessionService {
     return sessions.map(s => ({ ...s, sessionId: s.id }));
   }
 
-  sendMessage(sessionId, message) {
-    const proc = this.activeSessions.get(sessionId);
-    if (!proc) {
-      throw new Error(`Session ${sessionId} not found`);
-    }
-    // Title is now set via MCP rename_session tool, not automatically
-    // this.setTitleIfEmpty(sessionId, message);
-    proc.sendMessage(message);
-  }
-
-  respondToPermission(requestId, approved, message) {
-    const pending = this.pendingPermissions.get(requestId);
-    if (!pending) {
-      throw new Error(`Permission request ${requestId} not found`);
-    }
-    this.permissionServer.respondToPermission(requestId, approved, message);
-    this.pendingPermissions.delete(requestId);
+  renameSession(sessionId, title) {
+    const db = getDatabase();
+    const cleanTitle = title.replace(/\n/g, ' ').trim().substring(0, 80) || 'New Session';
+    db.prepare('UPDATE claude_sessions SET name = ? WHERE id = ?').run(cleanTitle, sessionId);
+    this.send('claude:session-title-updated', { sessionId, title: cleanTitle });
   }
 
   deleteSession(sessionId) {
@@ -585,32 +768,6 @@ class SessionService {
       throw new Error('Cannot delete an active session. Stop it first.');
     }
     db.prepare('DELETE FROM claude_sessions WHERE id = ?').run(sessionId);
-  }
-
-  stopSession(sessionId) {
-    const proc = this.activeSessions.get(sessionId);
-    if (proc) {
-      proc.stop();
-      this.activeSessions.delete(sessionId);
-      this.historyBuffer.delete(sessionId);  // Clean up history buffer
-      const db = getDatabase();
-      db.prepare("UPDATE claude_sessions SET status = 'stopped', last_active_at = CURRENT_TIMESTAMP WHERE id = ?").run(sessionId);
-    }
-  }
-
-  handleSessionExit(sessionId, code) {
-    this.activeSessions.delete(sessionId);
-    this.historyBuffer.delete(sessionId);
-    this.send('claude:session-exited', { sessionId, code });
-    const db = getDatabase();
-    db.prepare("UPDATE claude_sessions SET status = 'exited', last_active_at = CURRENT_TIMESTAMP WHERE id = ?").run(sessionId);
-  }
-
-  renameSession(sessionId, title) {
-    const db = getDatabase();
-    const cleanTitle = title.replace(/\n/g, ' ').trim().substring(0, 80) || 'New Session';
-    db.prepare('UPDATE claude_sessions SET name = ? WHERE id = ?').run(cleanTitle, sessionId);
-    this.send('claude:session-title-updated', { sessionId, title: cleanTitle });
   }
 
   listSessions(folderId, worktreeId = null) {
@@ -637,8 +794,8 @@ class SessionService {
   }
 
   destroy() {
-    for (const [, proc] of this.activeSessions) {
-      proc.stop();
+    for (const [, session] of this.activeSessions) {
+      session.stop();
     }
     this.activeSessions.clear();
     if (this.permissionServer) {
