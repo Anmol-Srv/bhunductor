@@ -461,6 +461,31 @@ pre,
   -webkit-app-region: no-drag;
 }
 
+.titlebar-terminal-btn {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: var(--radius-xs);
+  transition: color var(--transition-fast), background var(--transition-fast);
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-terminal-btn:hover {
+  color: var(--conductor);
+  background: var(--surface-overlay);
+}
+
+/* When cost badge is present, terminal button shouldn't push it */
+.session-cost-badge + .titlebar-terminal-btn {
+  margin-left: var(--spacing-sm);
+}
+
 
 .placeholder {
   color: var(--ink-muted);
@@ -3556,4 +3581,188 @@ pre,
   font-size: var(--text-sm);
   color: var(--ink-secondary);
   font-weight: 500;
+}
+
+/* ── Terminal Panel ── */
+
+.terminal-drag-handle {
+  flex-shrink: 0;
+  height: 4px;
+  cursor: ns-resize;
+  background: transparent;
+  transition: background var(--transition-fast);
+}
+
+.terminal-drag-handle:hover {
+  background: var(--conductor-muted);
+}
+
+.terminal-panel {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--edge);
+  background: var(--surface-base);
+  overflow: hidden;
+}
+
+.terminal-header {
+  flex-shrink: 0;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--edge);
+  padding: 0 var(--spacing-sm);
+  gap: var(--spacing-sm);
+}
+
+.terminal-header-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--ink-muted);
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.terminal-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+  padding: 3px 0;
+}
+
+/* Hide scrollbar on terminal tabs */
+.terminal-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.terminal-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 3px var(--spacing-sm);
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  transition: color var(--transition-fast), background var(--transition-fast);
+  white-space: nowrap;
+  border-left: 2px solid transparent;
+}
+
+.terminal-tab:hover {
+  color: var(--ink-secondary);
+  background: var(--surface-overlay);
+}
+
+.terminal-tab.active {
+  color: var(--ink);
+  background: var(--surface-overlay);
+  border-left-color: var(--conductor);
+}
+
+.terminal-tab-icon {
+  flex-shrink: 0;
+  color: var(--conductor);
+}
+
+.terminal-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+.terminal-tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+  padding: 1px;
+  border-radius: var(--radius-xs);
+  opacity: 0;
+  transition: opacity var(--transition-fast), color var(--transition-fast);
+}
+
+.terminal-tab:hover .terminal-tab-close,
+.terminal-tab.active .terminal-tab-close {
+  opacity: 1;
+}
+
+.terminal-tab-close:hover {
+  color: var(--ink);
+  background: var(--surface-hover);
+}
+
+.terminal-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.terminal-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-xs);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.terminal-action-btn:hover {
+  color: var(--ink);
+  background: var(--surface-overlay);
+}
+
+.terminal-action-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.terminal-action-btn:disabled:hover {
+  color: var(--ink-muted);
+  background: none;
+}
+
+.terminal-body {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.terminal-instance {
+  width: 100%;
+  height: 100%;
+  padding: var(--spacing-xs) 0 0 var(--spacing-xs);
+}
+
+/* Override xterm.js scrollbar to match app style */
+.terminal-instance .xterm-viewport::-webkit-scrollbar {
+  width: 6px;
+}
+
+.terminal-instance .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.terminal-instance .xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--edge-strong);
+  border-radius: 3px;
+}
+
+.terminal-instance .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-muted);
 }
