@@ -9,6 +9,7 @@ const { WINDOW_WIDTH, WINDOW_HEIGHT } = require('../shared/constants');
 let mainWindow = null;
 let configManager = null;
 let sessionService = null;
+let terminalService = null;
 
 function createWindow() {
   const { width, height } = configManager.get('window') || {
@@ -74,7 +75,9 @@ app.whenReady().then(() => {
 
   // Register IPC handlers (after window creation for Claude integration)
   console.time('[Main] ipc-register');
-  sessionService = registerIPC(mainWindow, configManager);
+  const services = registerIPC(mainWindow, configManager);
+  sessionService = services.sessionService;
+  terminalService = services.terminalService;
   console.timeEnd('[Main] ipc-register');
 
   // Defer cleanup — non-blocking, runs after event loop settles
@@ -102,6 +105,9 @@ app.on('window-all-closed', () => {
 });
 
 app.on('quit', () => {
+  if (terminalService) {
+    terminalService.destroy();
+  }
   if (sessionService) {
     sessionService.destroy();
   }

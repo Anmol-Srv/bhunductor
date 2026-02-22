@@ -53,6 +53,13 @@ const ALLOWED_CHANNELS = [
   'git:get-config',
   'git:get-log',
   'git:get-checks',
+  'terminal:create',
+  'terminal:data',
+  'terminal:resize',
+  'terminal:close',
+  'terminal:output',
+  'terminal:exit',
+  'terminal:get-buffer',
   'app:get-version',
   'app:quit',
   'app:open-external'

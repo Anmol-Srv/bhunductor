@@ -5,6 +5,7 @@ const BranchService = require('../services/BranchService');
 const SessionService = require('../services/SessionService');
 const FileService = require('../services/FileService');
 const GitService = require('../services/GitService');
+const TerminalService = require('../services/TerminalService');
 
 /**
  * Register all IPC handlers using domain services.
@@ -16,6 +17,7 @@ function registerIPC(mainWindow, configManager) {
   const sessionService = new SessionService(mainWindow);
   const fileService = new FileService();
   const gitService = new GitService();
+  const terminalService = new TerminalService(mainWindow);
 
   // Domain services register their own handlers
   folderService.registerHandlers(ipcMain, dialog);
@@ -23,6 +25,7 @@ function registerIPC(mainWindow, configManager) {
   sessionService.registerHandlers(ipcMain);
   fileService.registerHandlers(ipcMain);
   gitService.registerHandlers(ipcMain);
+  terminalService.registerHandlers(ipcMain);
 
   // Config handlers
   ipcMain.handle(IPC_CHANNELS.CONFIG_GET, (event, key) => {
@@ -57,7 +60,7 @@ function registerIPC(mainWindow, configManager) {
     shell.openExternal(url);
   });
 
-  return sessionService;
+  return { sessionService, terminalService };
 }
 
 module.exports = { registerIPC };

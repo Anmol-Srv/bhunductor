@@ -352,6 +352,8 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
         onLazyResume={handleLazyResume}
         onStartSession={handleStartSession}
         activeWorktree={activeWorktree}
+        folder={folder}
+        worktreePath={activeWorktree?.is_main ? folder.path : activeWorktree?.worktree_path}
       />
 
       <FilePanel

@@ -57,6 +57,14 @@ const IPC_CHANNELS = {
   GIT_GET_LOG: 'git:get-log',
   GIT_GET_CHECKS: 'git:get-checks',
 
+  TERMINAL_CREATE: 'terminal:create',
+  TERMINAL_DATA: 'terminal:data',
+  TERMINAL_RESIZE: 'terminal:resize',
+  TERMINAL_CLOSE: 'terminal:close',
+  TERMINAL_OUTPUT: 'terminal:output',
+  TERMINAL_EXIT: 'terminal:exit',
+  TERMINAL_GET_BUFFER: 'terminal:get-buffer',
+
   APP_GET_VERSION: 'app:get-version',
   APP_QUIT: 'app:quit',
   APP_OPEN_EXTERNAL: 'app:open-external'
