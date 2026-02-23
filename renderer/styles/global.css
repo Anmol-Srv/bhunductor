@@ -81,7 +81,7 @@ pre,
 
 .home-logo {
   font-size: 56px;
-  font-weight: 300;
+  font-weight: 600;
   letter-spacing: -2.5px;
   margin: 0 0 var(--spacing-sm) 0;
   color: var(--ink);
@@ -264,11 +264,47 @@ pre,
 }
 
 /* Dashboard Styles */
+.dashboard-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--surface-base);
+}
+
 .dashboard {
   display: flex;
   flex-direction: row;
-  height: 100vh;
-  background: var(--surface-base);
+  flex: 1;
+  min-height: 0;
+}
+
+/* Status Bar */
+.status-bar {
+  flex-shrink: 0;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--spacing-sm);
+  background: var(--surface-raised);
+  border-top: 1px solid var(--edge);
+  font-size: 11px;
+  color: var(--ink-muted);
+  user-select: none;
+}
+
+.status-bar-left,
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.status-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .nav-btn {
@@ -321,7 +357,6 @@ pre,
   padding: 0 8px;
   padding-left: 78px;
   -webkit-app-region: drag;
-  border-bottom: 1px solid var(--edge);
   display: flex;
   align-items: center;
 }
@@ -482,7 +517,7 @@ pre,
 }
 
 /* When cost badge is present, terminal button shouldn't push it */
-.session-cost-badge + .titlebar-terminal-btn {
+.session-cost-badge+.titlebar-terminal-btn {
   margin-left: var(--spacing-sm);
 }
 
@@ -598,6 +633,11 @@ pre,
 }
 
 .session-item.open {
+  color: var(--ink);
+}
+
+.session-item.selected {
+  background-color: var(--surface-overlay);
   color: var(--ink);
 }
 
@@ -1386,8 +1426,7 @@ pre,
   flex-wrap: wrap;
   padding: var(--spacing-md) var(--spacing-lg);
   margin-bottom: var(--spacing-md);
-  background-color: #1e1e1e;
-  /* Like a classic IDE code background tint */
+  background-color: var(--surface-base);
   border-bottom: 1px solid var(--edge-strong);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
@@ -1667,9 +1706,12 @@ pre,
 }
 
 @keyframes cursor-pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.2;
   }
@@ -1766,7 +1808,7 @@ pre,
   position: relative;
   background-color: var(--surface-raised);
   border: 1px solid var(--edge-strong);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xs);
   transition: border-color var(--transition-fast);
 }
 
@@ -1792,6 +1834,8 @@ pre,
 
 .chat-input-box textarea:focus {
   outline: none;
+  caret-color: var(--conductor);
+  caret-shape: block;
 }
 
 .chat-input-box textarea::placeholder {
@@ -2349,6 +2393,7 @@ pre,
     max-height: 0;
     transform: translateY(-4px);
   }
+
   to {
     opacity: 1;
     max-height: 1000px;
@@ -2366,9 +2411,11 @@ pre,
     transform: scale(0.6);
     opacity: 0;
   }
+
   70% {
     transform: scale(1.15);
   }
+
   100% {
     transform: scale(1);
     opacity: 1;
@@ -2384,6 +2431,7 @@ pre,
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -2655,7 +2703,7 @@ pre,
    File Panel (right sidebar)
    ======================================== */
 .file-panel {
-  width: 260px;
+  width: 320px;
   background: var(--surface-raised);
   border-left: 1px solid var(--edge);
   display: flex;
@@ -2781,6 +2829,7 @@ pre,
   display: flex;
   align-items: center;
   justify-content: space-between;
+  height: 38px;
   padding: 0 var(--spacing-sm) 0 0;
   border-bottom: 1px solid var(--edge);
   flex-shrink: 0;
@@ -2793,7 +2842,7 @@ pre,
 }
 
 .file-panel-mode-btn {
-  padding: var(--spacing-sm) var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
   border: none;
   background: transparent;
   border-bottom: 2px solid transparent;

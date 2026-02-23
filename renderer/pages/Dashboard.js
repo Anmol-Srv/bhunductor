@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { GitBranch, Radio } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 import MainContent from '../components/MainContent';
 import CreateBranchModal from '../components/CreateBranchModal';
@@ -313,76 +314,106 @@ function Dashboard({ folder, onGoHome, onGoBack, onGoForward, canGoBack, canGoFo
     });
   }, [folder, activeWorktree]);
 
+  const activeSessionCount = useMemo(() => {
+    let count = 0;
+    for (const wId in sessionsByWorktree) {
+      for (const s of sessionsByWorktree[wId]) {
+        if (s.status === 'active') count++;
+      }
+    }
+    return count;
+  }, [sessionsByWorktree]);
+
   return (
-    <div className="dashboard">
-      <Sidebar
-        collapsed={sidebarCollapsed}
-        onToggle={toggleSidebar}
-        worktrees={worktrees}
-        activeWorktree={activeWorktree}
-        onSelectBranch={handleSelectBranch}
-        onCreateBranch={() => setShowCreateModal(true)}
-        onDeleteBranch={handleDeleteBranch}
-        onCloseBranch={handleCloseBranch}
-        onReopenBranch={handleReopenBranch}
-        closedWorktrees={closedWorktrees}
-        onStartSession={handleStartSession}
-        onOpenSession={handleOpenSession}
-        onDeleteSession={handleDeleteSession}
-        onArchiveSession={handleArchiveSession}
-        onUnarchiveAndResume={handleUnarchiveAndResume}
-        onLoadArchivedSessions={handleLoadArchived}
-        sessionsByWorktree={sessionsByWorktree}
-        archivedSessionsByWorktree={archivedSessionsByWorktree}
-        openTabs={openTabs}
-        onGoHome={onGoHome}
-        onGoBack={onGoBack}
-        onGoForward={onGoForward}
-        canGoBack={canGoBack}
-        canGoForward={canGoForward}
-      />
+    <div className="dashboard-wrapper">
+      <div className="dashboard">
+        <Sidebar
+          collapsed={sidebarCollapsed}
+          onToggle={toggleSidebar}
+          worktrees={worktrees}
+          activeWorktree={activeWorktree}
+          onSelectBranch={handleSelectBranch}
+          onCreateBranch={() => setShowCreateModal(true)}
+          onDeleteBranch={handleDeleteBranch}
+          onCloseBranch={handleCloseBranch}
+          onReopenBranch={handleReopenBranch}
+          closedWorktrees={closedWorktrees}
+          onStartSession={handleStartSession}
+          onOpenSession={handleOpenSession}
+          onDeleteSession={handleDeleteSession}
+          onArchiveSession={handleArchiveSession}
+          onUnarchiveAndResume={handleUnarchiveAndResume}
+          onLoadArchivedSessions={handleLoadArchived}
+          sessionsByWorktree={sessionsByWorktree}
+          archivedSessionsByWorktree={archivedSessionsByWorktree}
+          openTabs={openTabs}
+          activeTabId={activeTabId}
+          onGoHome={onGoHome}
+          onGoBack={onGoBack}
+          onGoForward={onGoForward}
+          canGoBack={canGoBack}
+          canGoForward={canGoForward}
+        />
 
-      <MainContent
-        folderName={folder.name}
-        openTabs={openTabs}
-        activeTabId={activeTabId}
-        onSwitchTab={switchTab}
-        onCloseTab={handleCloseTab}
-        pendingResumeSession={pendingResumeSession}
-        onLazyResume={handleLazyResume}
-        onStartSession={handleStartSession}
-        activeWorktree={activeWorktree}
-        folder={folder}
-        worktreePath={activeWorktree?.is_main ? folder.path : activeWorktree?.worktree_path}
-      />
+        <MainContent
+          folderName={folder.name}
+          openTabs={openTabs}
+          activeTabId={activeTabId}
+          onSwitchTab={switchTab}
+          onCloseTab={handleCloseTab}
+          pendingResumeSession={pendingResumeSession}
+          onLazyResume={handleLazyResume}
+          onStartSession={handleStartSession}
+          activeWorktree={activeWorktree}
+          folder={folder}
+          worktreePath={activeWorktree?.is_main ? folder.path : activeWorktree?.worktree_path}
+        />
 
-      <FilePanel
-        collapsed={filePanelCollapsed}
-        onToggle={toggleFilePanel}
-        folderId={folder.id}
-        worktreeId={activeWorktree?.id}
-        activeSessionId={(() => {
-          const tab = openTabs.find(t => (t.id || t.sessionId) === activeTabId);
-          return tab?.type !== 'file' ? (tab?.sessionId || null) : null;
-        })()}
-        onChecksUpdate={() => {}}
-        onOpenFile={handleOpenFile}
-      />
+        <FilePanel
+          collapsed={filePanelCollapsed}
+          onToggle={toggleFilePanel}
+          folderId={folder.id}
+          worktreeId={activeWorktree?.id}
+          activeSessionId={(() => {
+            const tab = openTabs.find(t => (t.id || t.sessionId) === activeTabId);
+            return tab?.type !== 'file' ? (tab?.sessionId || null) : null;
+          })()}
+          onChecksUpdate={() => {}}
+          onOpenFile={handleOpenFile}
+        />
 
-      <CreateBranchModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onSubmit={handleCreateBranch}
-      />
+        <CreateBranchModal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          onSubmit={handleCreateBranch}
+        />
 
-      <DeleteConfirmModal
-        isOpen={deleteConfirm !== null}
-        branchName={deleteConfirm?.name}
-        onConfirm={confirmDelete}
-        onCancel={() => setDeleteConfirm(null)}
-      />
+        <DeleteConfirmModal
+          isOpen={deleteConfirm !== null}
+          branchName={deleteConfirm?.name}
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleteConfirm(null)}
+        />
 
-      {settingsOpen && <SettingsModal folderPath={folder?.path} />}
+        {settingsOpen && <SettingsModal folderPath={folder?.path} />}
+      </div>
+
+      <div className="status-bar">
+        <div className="status-bar-left">
+          <span className="status-bar-item">
+            <GitBranch size={12} />
+            {activeWorktree?.branch_name || 'no branch'}
+          </span>
+          <span className="status-bar-item">
+            <Radio size={12} />
+            {activeSessionCount} session{activeSessionCount !== 1 ? 's' : ''}
+          </span>
+        </div>
+        <div className="status-bar-right">
+          <span className="status-bar-item">Claude SDK</span>
+          <span className="status-bar-item">Bhunductor v1.0.0</span>
+        </div>
+      </div>
     </div>
   );
 }

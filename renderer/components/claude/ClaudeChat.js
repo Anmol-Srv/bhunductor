@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
-import { Send, Square, Copy, Check } from 'lucide-react';
+import { ArrowRight, Pause, Copy, Check } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import ToolUseBlock from './ToolUseBlock';
 import ToolCallGroup from './ToolCallGroup';
@@ -79,7 +79,7 @@ const ChatInputBox = memo(({
               onClick={onStop}
               title="Stop generating"
             >
-              <Square size={12} />
+              <Pause size={14} />
             </button>
           ) : (
             <button
@@ -87,7 +87,7 @@ const ChatInputBox = memo(({
               onClick={handleSendMessage}
               disabled={!input.trim()}
             >
-              <Send size={14} />
+              <ArrowRight size={16} />
             </button>
           )}
         </div>
@@ -401,14 +401,6 @@ function ClaudeChat({
   return (
     <div className="claude-chat">
       <div className="chat-feed" ref={chatFeedRef}>
-        {!isReadOnly && (
-          <WelcomeBanner
-            model={model}
-            branchName={branchName}
-            folderName={folderName}
-          />
-        )}
-
         {renderItems.map((item, idx) => {
           if (item.type === 'tool_group') {
             return <ToolCallGroup key={`tg-${idx}`} tools={item.tools} />;

@@ -27,11 +27,11 @@ function TerminalInstance({ terminalId, isVisible }) {
       cursorBlink: true,
       cursorStyle: 'bar',
       theme: {
-        background: '#08080a',
+        background: '#171717',
         foreground: '#e4e4e7',
         cursor: '#36B5AB',
         selectionBackground: 'rgba(54, 181, 171, 0.25)',
-        black: '#08080a',
+        black: '#171717',
         red: '#ef4444',
         green: '#22c55e',
         yellow: '#d4a017',

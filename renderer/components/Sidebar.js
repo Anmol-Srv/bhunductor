@@ -23,6 +23,7 @@ function Sidebar({
   sessionsByWorktree,
   archivedSessionsByWorktree,
   openTabs,
+  activeTabId,
   onGoHome,
   onGoBack,
   onGoForward,
@@ -73,6 +74,7 @@ function Sidebar({
                 sessions={sessionsByWorktree[worktree.id] || []}
                 archivedSessions={(archivedSessionsByWorktree || {})[worktree.id] || []}
                 openTabs={openTabs || []}
+                activeTabId={activeTabId}
                 onSelect={() => onSelectBranch(worktree)}
                 onDelete={() => onDeleteBranch(worktree.id, worktree.branch_name)}
                 onClose={() => onCloseBranch(worktree.id)}
@@ -110,7 +112,6 @@ function Sidebar({
                         onClick={() => onReopenBranch(worktree.id)}
                         title={`${worktree.branch_name} — click to reopen`}
                       >
-                        <GitBranch size={12} className="closed-branch-icon" />
                         <span className="closed-branch-name">{worktree.branch_name}</span>
                         <button
                           className="closed-branch-reopen-btn"
