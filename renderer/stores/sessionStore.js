@@ -313,17 +313,43 @@ const useSessionStore = create((set, get) => ({
     }));
     return window.electron.invoke('claude:send-message', sessionId, text);
   },
-  respondToPermission: async (sessionId, requestId, approved) => {
-    const result = await window.electron.invoke('claude:permission-respond', requestId, approved);
+  respondToPermission: async (sessionId, requestId, action, message) => {
+    const result = await window.electron.invoke('claude:permission-respond', requestId, action, message);
     if (result.success) {
       get().shiftPermission(sessionId);
     }
     return result;
   },
+  // Get messages including any uncommitted streaming text (for persistence)
+  getMessagesWithStreaming: (sessionId) => {
+    const messages = messageCache.get(sessionId) || [];
+    const state = get();
+    const streamMsg = state.streamingState[sessionId]?.streamingMessage || '';
+    if (streamMsg) {
+      return [...messages, {
+        id: 'streaming-partial',
+        role: 'assistant',
+        type: 'text',
+        text: streamMsg,
+        isPartial: true
+      }];
+    }
+    return messages;
+  },
   saveMessages: async (sessionId) => {
     const messages = messageCache.get(sessionId) || [];
     if (messages.length > 0) {
       await window.electron.invoke('claude:session-save-messages', sessionId, messages).catch(() => {});
+    }
+  },
+  // Save all sessions that have messages (includes streaming text)
+  saveAllSessions: () => {
+    const state = get();
+    for (const [sessionId] of messageCache) {
+      const messages = state.getMessagesWithStreaming(sessionId);
+      if (messages.length > 0) {
+        window.electron.invoke('claude:session-save-messages', sessionId, messages).catch(() => {});
+      }
     }
   },
   lazyResume: async (folderId, worktreeId, claudeSessionId, message, oldMessages, branchName, name) => {

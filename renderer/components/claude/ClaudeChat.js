@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
-import { Send, Square, AlertCircle, Copy, Check } from 'lucide-react';
+import { Send, Square, Copy, Check } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import ToolUseBlock from './ToolUseBlock';
 import ToolCallGroup from './ToolCallGroup';
@@ -7,6 +7,7 @@ import ThinkingBlock from './ThinkingBlock';
 import TurnCostBadge from './TurnCostBadge';
 import PermissionPrompt from './PermissionPrompt';
 import StreamLoader from './StreamLoader';
+import ErrorBlock from './ErrorBlock';
 import AskUserQuestionBlock from './AskUserQuestionBlock';
 import InstructionCard from './InstructionCard';
 import WelcomeBanner from './WelcomeBanner';
@@ -19,7 +20,7 @@ const ActiveStreamBlock = memo(({ sessionId }) => {
   if (!streamingMessage) return null;
 
   return (
-    <div className="chat-assistant-msg streaming">
+    <div className="chat-assistant-msg streaming fade-in-stream">
       <MarkdownRenderer content={streamingMessage} />
       <span className="streaming-cursor" />
     </div>
@@ -222,6 +223,15 @@ function ClaudeChat({
     }
   };
 
+  const handleRetry = useCallback(() => {
+    // Find the last user message and re-send it
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user' && m.type === 'text');
+    if (lastUserMsg?.text) {
+      sendMessage(sessionId, lastUserMsg.text);
+      useSessionStore.getState().setStreaming(sessionId, true);
+    }
+  }, [messages, sessionId, sendMessage]);
+
   const handleCopy = useCallback((text, msgId) => {
     navigator.clipboard.writeText(text).then(() => {
       setCopiedId(msgId);
@@ -229,16 +239,17 @@ function ClaudeChat({
     });
   }, []);
 
-  const handlePermissionResponse = async (approved, answers = null) => {
+  const handlePermissionResponse = async (action, message = null) => {
     if (!activePermission) return;
 
     // For AskUserQuestion, send answers object as JSON string in message parameter
-    if (activePermission.tool === 'AskUserQuestion' && answers) {
-      const answersJSON = JSON.stringify({ answers });
-      await window.electron.invoke('claude:permission-respond', activePermission.requestId, true, answersJSON);
+    if (activePermission.tool === 'AskUserQuestion' && action === true) {
+      // backward compat: AskUserQuestion passes (true, answers)
+      const answersJSON = JSON.stringify({ answers: message });
+      await window.electron.invoke('claude:permission-respond', activePermission.requestId, 'allow', answersJSON);
       useSessionStore.getState().shiftPermission(sessionId);
     } else {
-      await respondToPermission(sessionId, activePermission.requestId, approved);
+      await respondToPermission(sessionId, activePermission.requestId, action, message);
     }
   };
 
@@ -321,10 +332,13 @@ function ClaudeChat({
 
       case 'error':
         return (
-          <div key={msg.id || idx} className="chat-error">
-            <AlertCircle size={12} />
-            <span>{msg.text}</span>
-          </div>
+          <ErrorBlock
+            key={msg.id || idx}
+            text={msg.text}
+            errorType={msg.errorType || 'unknown'}
+            isRecoverable={msg.isRecoverable || false}
+            onRetry={!isReadOnly ? handleRetry : null}
+          />
         );
 
       case 'result':
@@ -440,8 +454,9 @@ function ClaudeChat({
         <PermissionPrompt
           tool={activePermission.tool}
           input={activePermission.input}
-          onApprove={() => handlePermissionResponse(true)}
-          onDeny={() => handlePermissionResponse(false)}
+          hasSuggestions={activePermission.hasSuggestions}
+          decisionReason={activePermission.decisionReason}
+          onRespond={(action, message) => handlePermissionResponse(action, message)}
         />
       )}
 
@@ -472,7 +487,7 @@ function ClaudeChat({
                 : m
             ));
             if (activePermission?.tool === 'AskUserQuestion') {
-              handlePermissionResponse(false);
+              handlePermissionResponse('deny');
             }
           }}
           hasPermission={true}

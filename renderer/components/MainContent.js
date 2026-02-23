@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { X, GitBranch, Plus } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { X, GitBranch, Plus, Terminal } from 'lucide-react';
 import ClaudeChat from './claude/ClaudeChat';
 import FileViewer from './FileViewer';
+import TerminalPanel from './terminal/TerminalPanel';
 import useSessionStore from '../stores/sessionStore';
+import useTerminalStore from '../stores/terminalStore';
 import { getFileIcon } from '../utils/fileIcons';
 
 /** Get the canonical tab key */
@@ -14,7 +16,7 @@ function formatSessionCost(costUsd) {
   return `$${costUsd.toFixed(2)}`;
 }
 
-function MainContent({ folderName, openTabs, activeTabId, onSwitchTab, onCloseTab, pendingResumeSession, onLazyResume, onStartSession, activeWorktree }) {
+function MainContent({ folderName, openTabs, activeTabId, onSwitchTab, onCloseTab, pendingResumeSession, onLazyResume, onStartSession, activeWorktree, folder, worktreePath }) {
   const [closeConfirm, setCloseConfirm] = useState(null);
 
   // Subscribe to message cache version to re-derive cost on updates
@@ -33,6 +35,18 @@ function MainContent({ folderName, openTabs, activeTabId, onSwitchTab, onCloseTa
     }
     return total;
   }, [activeSessionId, cacheVersion]);
+
+  // Terminal toggle: show panel if terminals exist, create one if none
+  const handleTerminalToggle = useCallback(() => {
+    if (!folder) return;
+    const store = useTerminalStore.getState();
+    const terminals = store.terminalsByFolder[folder.id] || [];
+    if (terminals.length > 0) {
+      store.togglePanel();
+    } else {
+      store.createTerminal(folder.id, worktreePath || undefined);
+    }
+  }, [folder, worktreePath]);
 
   // Escape to dismiss close-tab confirm
   useEffect(() => {
@@ -57,6 +71,9 @@ function MainContent({ folderName, openTabs, activeTabId, onSwitchTab, onCloseTa
         <div className="main-content">
           <div className="main-content-titlebar">
             <span className="main-content-repo-name">{folderName}</span>
+            <button className="titlebar-terminal-btn" onClick={handleTerminalToggle} title="Toggle Terminal (Ctrl+`)">
+              <Terminal size={14} />
+            </button>
           </div>
           <div className="tab-bar">
             <div
@@ -85,6 +102,7 @@ function MainContent({ folderName, openTabs, activeTabId, onSwitchTab, onCloseTa
               />
             </div>
           </div>
+          {folder && <TerminalPanel folderId={folder.id} worktreePath={worktreePath} />}
         </div>
       );
     }
@@ -96,6 +114,9 @@ function MainContent({ folderName, openTabs, activeTabId, onSwitchTab, onCloseTa
       <div className="main-content">
         <div className="main-content-titlebar">
           <span className="main-content-repo-name">{folderName}</span>
+          <button className="titlebar-terminal-btn" onClick={handleTerminalToggle} title="Toggle Terminal (Ctrl+`)">
+            <Terminal size={14} />
+          </button>
         </div>
         <div className="empty-state">
           {branchName && (
@@ -116,6 +137,7 @@ function MainContent({ folderName, openTabs, activeTabId, onSwitchTab, onCloseTa
 
           <span className="empty-state-hint">&#8984;N</span>
         </div>
+        {folder && <TerminalPanel folderId={folder.id} worktreePath={worktreePath} />}
       </div>
     );
   }
@@ -151,6 +173,9 @@ function MainContent({ folderName, openTabs, activeTabId, onSwitchTab, onCloseTa
         {formattedCost && (
           <span className="session-cost-badge">{formattedCost}</span>
         )}
+        <button className="titlebar-terminal-btn" onClick={handleTerminalToggle} title="Toggle Terminal (Ctrl+`)">
+          <Terminal size={14} />
+        </button>
       </div>
       {/* Tab bar */}
       <div className="tab-bar">
@@ -216,6 +241,8 @@ function MainContent({ folderName, openTabs, activeTabId, onSwitchTab, onCloseTa
           );
         })}
       </div>
+
+      {folder && <TerminalPanel folderId={folder.id} worktreePath={worktreePath} />}
 
       {/* Close confirmation modal */}
       {closeConfirm && (

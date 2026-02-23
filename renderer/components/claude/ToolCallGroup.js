@@ -2,6 +2,17 @@ import React, { useState } from 'react';
 import { ChevronRight, ChevronDown, Loader, Check, X } from 'lucide-react';
 import ToolUseBlock from './ToolUseBlock';
 
+function getToolNamesPreview(tools) {
+  const names = tools.map(t => {
+    const name = t.toolName || 'Unknown';
+    // Strip MCP prefix: mcp__server__Tool → Tool
+    return name.includes('__') ? name.split('__').pop() : name;
+  });
+  const unique = [...new Set(names)];
+  if (unique.length <= 2) return unique.join(', ');
+  return `${unique.slice(0, 2).join(', ')} +${unique.length - 2} more`;
+}
+
 function ToolCallGroup({ tools }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -12,7 +23,7 @@ function ToolCallGroup({ tools }) {
   const groupIcon = () => {
     if (hasRunning) return <Loader size={12} className="spinner tool-status-icon running" />;
     if (hasError) return <X size={12} className="tool-status-icon error" />;
-    if (allComplete) return <Check size={12} className="tool-status-icon complete" />;
+    if (allComplete) return <Check size={12} className="tool-status-icon complete status-pop" />;
     return <Loader size={12} className="spinner tool-status-icon running" />;
   };
 
@@ -20,6 +31,7 @@ function ToolCallGroup({ tools }) {
   const label = hasRunning
     ? `${completedCount}/${tools.length} tool calls`
     : `${tools.length} tool calls`;
+  const namesPreview = getToolNamesPreview(tools);
 
   return (
     <div className="tool-call-group">
@@ -27,9 +39,12 @@ function ToolCallGroup({ tools }) {
         {expanded ? <ChevronDown size={12} className="tool-chevron" /> : <ChevronRight size={12} className="tool-chevron" />}
         {groupIcon()}
         <span className="tool-call-group-label">{label}</span>
+        {!expanded && (
+          <span className="tool-call-group-names">{namesPreview}</span>
+        )}
       </div>
       {expanded && (
-        <div className="tool-call-group-body">
+        <div className="tool-call-group-body slide-down">
           {tools.map((tool, idx) => (
             <ToolUseBlock
               key={tool.toolUseId || idx}

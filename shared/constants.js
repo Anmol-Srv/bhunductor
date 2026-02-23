@@ -46,6 +46,8 @@ const IPC_CHANNELS = {
   CLAUDE_SESSION_GET_LAST: 'claude:session-get-last',
   CLAUDE_SESSION_LAZY_RESUME: 'claude:session-lazy-resume',
   CLAUDE_SESSION_CHECK_ALIVE: 'claude:session-check-alive',
+  CLAUDE_RENDERER_READY: 'claude:renderer-ready',
+  CLAUDE_SESSION_GET_ACTIVE: 'claude:session-get-active',
 
   FILE_TREE_GET: 'file:tree-get',
   FILE_READ_CONTENT: 'file:read-content',
@@ -56,6 +58,14 @@ const IPC_CHANNELS = {
   GIT_GET_CONFIG: 'git:get-config',
   GIT_GET_LOG: 'git:get-log',
   GIT_GET_CHECKS: 'git:get-checks',
+
+  TERMINAL_CREATE: 'terminal:create',
+  TERMINAL_DATA: 'terminal:data',
+  TERMINAL_RESIZE: 'terminal:resize',
+  TERMINAL_CLOSE: 'terminal:close',
+  TERMINAL_OUTPUT: 'terminal:output',
+  TERMINAL_EXIT: 'terminal:exit',
+  TERMINAL_GET_BUFFER: 'terminal:get-buffer',
 
   APP_GET_VERSION: 'app:get-version',
   APP_QUIT: 'app:quit',
@@ -72,6 +82,16 @@ const MAX_RECENT_FOLDERS = 5;
 const WINDOW_WIDTH = 1400;
 const WINDOW_HEIGHT = 900;
 
+// Permission timeout (5 minutes)
+const PERMISSION_TIMEOUT_MS = 300000;
+
+// Tools hidden from the chat UI (rename_session variants)
+const HIDDEN_TOOLS = [
+  'rename_session',
+  'mcp__bhunductor__rename_session',
+  'mcp__bhunductor-permissions__rename_session'
+];
+
 module.exports = {
   IPC_CHANNELS,
   APP_DATA_DIR,
@@ -79,5 +99,7 @@ module.exports = {
   DB_FILE,
   MAX_RECENT_FOLDERS,
   WINDOW_WIDTH,
-  WINDOW_HEIGHT
+  WINDOW_HEIGHT,
+  PERMISSION_TIMEOUT_MS,
+  HIDDEN_TOOLS
 };
