@@ -1,68 +1,47 @@
 const { IPC_CHANNELS } = require('../../shared/constants');
+const { wrapHandler } = require('../utils/ipc-handler');
 const Folder = require('../data/models/Folder');
+
+const w = (fn) => wrapHandler('FolderService', fn);
 
 class FolderService {
   registerHandlers(ipcMain, dialog) {
-    ipcMain.handle(IPC_CHANNELS.FOLDER_OPEN_DIALOG, async () => {
-      try {
-        const result = await dialog.showOpenDialog({
-          properties: ['openDirectory'],
-          title: 'Open Git Repository',
-          buttonLabel: 'Open'
-        });
+    ipcMain.handle(IPC_CHANNELS.FOLDER_OPEN_DIALOG, w(async () => {
+      const result = await dialog.showOpenDialog({
+        properties: ['openDirectory'],
+        title: 'Open Git Repository',
+        buttonLabel: 'Open'
+      });
 
-        if (result.canceled || result.filePaths.length === 0) {
-          return { canceled: true };
-        }
-
-        const folderPath = result.filePaths[0];
-
-        if (!Folder.isGitRepo(folderPath)) {
-          return { error: 'Selected folder is not a git repository', path: folderPath };
-        }
-
-        const folder = Folder.addOrUpdate(folderPath);
-        return { folder };
-      } catch (error) {
-        console.error('[FolderService] Error opening folder:', error);
-        return { success: false, error: error.message };
+      if (result.canceled || result.filePaths.length === 0) {
+        return { canceled: true };
       }
-    });
 
-    ipcMain.handle(IPC_CHANNELS.FOLDER_GET_RECENT, () => {
-      try {
-        return Folder.findRecent();
-      } catch (error) {
-        console.error('[FolderService] Error getting recent folders:', error);
-        return { success: false, error: error.message };
-      }
-    });
+      const folderPath = result.filePaths[0];
 
-    ipcMain.handle(IPC_CHANNELS.FOLDER_ADD, (event, folderPath) => {
-      try {
-        return Folder.addOrUpdate(folderPath);
-      } catch (error) {
-        console.error('[FolderService] Error adding folder:', error);
-        return { success: false, error: error.message };
+      if (!Folder.isGitRepo(folderPath)) {
+        return { error: 'Selected folder is not a git repository', path: folderPath };
       }
-    });
 
-    ipcMain.handle(IPC_CHANNELS.FOLDER_REMOVE, (event, folderId) => {
-      try {
-        return { success: Folder.delete(folderId) };
-      } catch (error) {
-        console.error('[FolderService] Error removing folder:', error);
-        return { success: false, error: error.message };
-      }
-    });
+      const folder = Folder.addOrUpdate(folderPath);
+      return { folder };
+    }));
 
-    ipcMain.handle(IPC_CHANNELS.FOLDER_VALIDATE_GIT, (event, folderPath) => {
-      try {
-        return { valid: Folder.isGitRepo(folderPath) };
-      } catch (error) {
-        return { valid: false, error: error.message };
-      }
-    });
+    ipcMain.handle(IPC_CHANNELS.FOLDER_GET_RECENT, w(() => {
+      return Folder.findRecent();
+    }));
+
+    ipcMain.handle(IPC_CHANNELS.FOLDER_ADD, w((event, folderPath) => {
+      return Folder.addOrUpdate(folderPath);
+    }));
+
+    ipcMain.handle(IPC_CHANNELS.FOLDER_REMOVE, w((event, folderId) => {
+      return { success: Folder.delete(folderId) };
+    }));
+
+    ipcMain.handle(IPC_CHANNELS.FOLDER_VALIDATE_GIT, w((event, folderPath) => {
+      return { valid: Folder.isGitRepo(folderPath) };
+    }));
   }
 }
 

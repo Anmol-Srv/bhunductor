@@ -37,7 +37,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, '../renderer/preload.js')
+      preload: path.join(__dirname, '../renderer/preload.bundle.js')
     }
   });
 
@@ -101,6 +101,12 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
+  }
+});
+
+app.on('before-quit', () => {
+  if (sessionService) {
+    sessionService.saveAllActiveSessions();
   }
 });
 

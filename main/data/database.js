@@ -280,6 +280,22 @@ function runMigrations() {
     }
   }
 
+  const MIGRATION_ADD_INDEXES = 'add_performance_indexes';
+
+  if (!hasMigrationRun(MIGRATION_ADD_INDEXES)) {
+    try {
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_claude_sessions_worktree_id ON claude_sessions(worktree_id);
+        CREATE INDEX IF NOT EXISTS idx_claude_sessions_status ON claude_sessions(status);
+        CREATE INDEX IF NOT EXISTS idx_worktrees_status ON worktrees(status);
+      `);
+
+      markMigrationApplied(MIGRATION_ADD_INDEXES);
+    } catch (error) {
+      console.error(`[Database] Migration failed: ${MIGRATION_ADD_INDEXES}`, error);
+    }
+  }
+
   const MIGRATION_RELOCATE_WORKTREES = 'relocate_worktrees_to_app_data';
 
   if (!hasMigrationRun(MIGRATION_RELOCATE_WORKTREES)) {

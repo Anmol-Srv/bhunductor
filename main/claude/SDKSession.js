@@ -1,5 +1,6 @@
 const { getClaudePath } = require('./cli-utils');
 const { createBhunductorMcpServer } = require('../mcp/sdk-mcp-server');
+const { HIDDEN_TOOLS } = require('../../shared/constants');
 
 // Lazy-loaded SDK (ESM-only module, can't use require in CommonJS)
 let _sdk = null;
@@ -70,15 +71,17 @@ class SDKSession {
     const permissionHandler = this.options.permissionHandler;
     if (!permissionHandler) return undefined;
 
-    return async (toolName, input, { signal }) => {
-      // Auto-approve rename_session (hidden from UI)
-      if (toolName === 'rename_session' ||
-          toolName === 'mcp__bhunductor__rename_session') {
+    return async (toolName, input, options) => {
+      const { signal, suggestions, decisionReason, blockedPath, toolUseID } = options || {};
+      // Auto-approve hidden tools (rename_session variants)
+      if (HIDDEN_TOOLS.some(t => toolName === t || toolName.includes(t))) {
         return { behavior: 'allow', updatedInput: input };
       }
 
       // Request permission from user via IPC
-      return permissionHandler(this.sessionId, toolName, input, signal);
+      return permissionHandler(this.sessionId, toolName, input, signal, {
+        suggestions, decisionReason, blockedPath, toolUseID
+      });
     };
   }
 
@@ -155,9 +158,20 @@ class SDKSession {
         // Don't call onExit to avoid double-cleanup.
       } else {
         console.error('[SDKSession] Query error:', err.message);
+        const errMsg = err.message || 'Unknown SDK error';
+        let errorType = 'sdk_error';
+        let isRecoverable = true;
+        if (/network|ECONNREFUSED|ECONNRESET|ETIMEDOUT|fetch failed/i.test(errMsg)) {
+          errorType = 'network';
+        } else if (/ENOENT|not found|command not found/i.test(errMsg)) {
+          errorType = 'cli_not_found';
+          isRecoverable = false;
+        }
         this.callbacks.onError({
           sessionId: this.sessionId,
-          error: err.message || 'Unknown SDK error'
+          error: errMsg,
+          errorType,
+          isRecoverable
         });
         // Fatal error — signal session failure so it gets cleaned up
         this.callbacks.onExit(1);
@@ -387,9 +401,13 @@ class SDKSession {
     } else {
       // Error subtypes: error_during_execution, error_max_turns, error_max_budget_usd
       const errorMsg = message.errors?.join('; ') || `Query ended with: ${message.subtype}`;
+      const errorType = message.subtype || 'unknown';
+      const isRecoverable = errorType === 'error_during_execution' || errorType === 'error_max_turns';
       this.callbacks.onError({
         sessionId: this.sessionId,
-        error: errorMsg
+        error: errorMsg,
+        errorType,
+        isRecoverable
       });
       this.callbacks.onTurnComplete?.({
         sessionId: this.sessionId,

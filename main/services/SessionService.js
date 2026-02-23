@@ -5,7 +5,10 @@ const Folder = require('../data/models/Folder');
 const ClaudeProcess = require('../claude/ClaudeProcess');
 const SDKSession = require('../claude/SDKSession');
 const PermissionHttpServer = require('../mcp/PermissionHttpServer');
-const { IPC_CHANNELS } = require('../../shared/constants');
+const { IPC_CHANNELS, PERMISSION_TIMEOUT_MS, HIDDEN_TOOLS } = require('../../shared/constants');
+const { wrapHandler } = require('../utils/ipc-handler');
+
+const w = (fn) => wrapHandler('SessionService', fn);
 
 // Feature flag: set to true to use the Agent SDK instead of raw CLI subprocess
 const USE_SDK = true;
@@ -37,190 +40,129 @@ class SessionService {
   }
 
   registerHandlers(ipcMain) {
-    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_START, async (event, folderId, worktreeId, claudeSessionId) => {
-      try {
-        let sessionData;
-        if (claudeSessionId) {
-          const db = getDatabase();
-          const existingRow = db.prepare(`
-            SELECT id FROM claude_sessions
-            WHERE claude_session_id = ? AND status IN ('exited', 'stopped')
-            ORDER BY COALESCE(last_active_at, created_at) DESC LIMIT 1
-          `).get(claudeSessionId);
-          if (existingRow) {
-            sessionData = this.reactivateSession(existingRow.id, folderId, worktreeId);
-          } else {
-            sessionData = this.createSession(folderId, worktreeId);
-          }
+    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_START, w(async (event, folderId, worktreeId, claudeSessionId) => {
+      let sessionData;
+      if (claudeSessionId) {
+        const db = getDatabase();
+        const existingRow = db.prepare(`
+          SELECT id FROM claude_sessions
+          WHERE claude_session_id = ? AND status IN ('exited', 'stopped')
+          ORDER BY COALESCE(last_active_at, created_at) DESC LIMIT 1
+        `).get(claudeSessionId);
+        if (existingRow) {
+          sessionData = this.reactivateSession(existingRow.id, folderId, worktreeId);
         } else {
           sessionData = this.createSession(folderId, worktreeId);
         }
-        const { deletedSessionIds, reactivatedSessionId, ...session } = sessionData;
-        return { success: true, session, deletedSessionIds, reactivatedSessionId };
-      } catch (error) {
-        console.error('[SessionService] Error starting session:', error);
-        return { success: false, error: error.message };
+      } else {
+        sessionData = this.createSession(folderId, worktreeId);
       }
-    });
+      const { deletedSessionIds, reactivatedSessionId, ...session } = sessionData;
+      return { success: true, session, deletedSessionIds, reactivatedSessionId };
+    }));
 
-    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_GET_HISTORY, async (event, sessionId) => {
-      try {
-        const messages = this.getSessionHistory(sessionId);
-        return { success: true, messages };
-      } catch (error) {
-        console.error('[SessionService] Error getting history:', error);
-        return { success: false, error: error.message };
-      }
-    });
+    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_GET_HISTORY, w(async (event, sessionId) => {
+      const messages = this.getSessionHistory(sessionId);
+      return { success: true, messages };
+    }));
 
-    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_SAVE_MESSAGES, async (event, sessionId, messages) => {
-      try {
-        this.saveSessionMessages(sessionId, messages);
-        return { success: true };
-      } catch (error) {
-        console.error('[SessionService] Error saving messages:', error);
-        return { success: false, error: error.message };
-      }
-    });
+    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_SAVE_MESSAGES, w(async (event, sessionId, messages) => {
+      this.saveSessionMessages(sessionId, messages);
+      return { success: true };
+    }));
 
-    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_STOP, async (event, sessionId) => {
-      try {
-        this.stopSession(sessionId);
-        return { success: true };
-      } catch (error) {
-        console.error('[SessionService] Error stopping session:', error);
-        return { success: false, error: error.message };
-      }
-    });
+    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_STOP, w(async (event, sessionId) => {
+      this.stopSession(sessionId);
+      return { success: true };
+    }));
 
-    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_DELETE, async (event, sessionId) => {
-      try {
-        this.deleteSession(sessionId);
-        return { success: true };
-      } catch (error) {
-        console.error('[SessionService] Error deleting session:', error);
-        return { success: false, error: error.message };
-      }
-    });
+    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_DELETE, w(async (event, sessionId) => {
+      this.deleteSession(sessionId);
+      return { success: true };
+    }));
 
-    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_LIST, async (event, folderId, worktreeId) => {
-      try {
-        const sessions = this.listSessions(folderId, worktreeId);
-        return { success: true, sessions };
-      } catch (error) {
-        console.error('[SessionService] Error listing sessions:', error);
-        return { success: false, error: error.message };
-      }
-    });
+    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_LIST, w(async (event, folderId, worktreeId) => {
+      const sessions = this.listSessions(folderId, worktreeId);
+      return { success: true, sessions };
+    }));
 
-    ipcMain.handle(IPC_CHANNELS.CLAUDE_SEND_MESSAGE, async (event, sessionId, message) => {
-      try {
-        this.sendMessage(sessionId, message);
-        return { success: true };
-      } catch (error) {
-        console.error('[SessionService] Error sending message:', error);
-        return { success: false, error: error.message };
-      }
-    });
+    ipcMain.handle(IPC_CHANNELS.CLAUDE_SEND_MESSAGE, w(async (event, sessionId, message) => {
+      this.sendMessage(sessionId, message);
+      return { success: true };
+    }));
 
-    ipcMain.handle(IPC_CHANNELS.CLAUDE_PERMISSION_RESPOND, async (event, requestId, approved, message) => {
-      try {
-        this.respondToPermission(requestId, approved, message);
-        return { success: true };
-      } catch (error) {
-        console.error('[SessionService] Error responding to permission:', error);
-        return { success: false, error: error.message };
-      }
-    });
+    ipcMain.handle(IPC_CHANNELS.CLAUDE_PERMISSION_RESPOND, w(async (event, requestId, action, message) => {
+      this.respondToPermission(requestId, action, message);
+      return { success: true };
+    }));
 
-    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_GET_LAST, async (event, folderId, worktreeId) => {
-      try {
-        const session = this.getLastSessionWithMessages(folderId, worktreeId);
-        if (session) {
-          let parsedMessages = [];
-          if (session.messages) {
-            try { parsedMessages = JSON.parse(session.messages); } catch {}
-          }
-          return { success: true, session: { ...session, sessionId: session.id, parsedMessages } };
+    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_GET_LAST, w(async (event, folderId, worktreeId) => {
+      const session = this.getLastSessionWithMessages(folderId, worktreeId);
+      if (session) {
+        let parsedMessages = [];
+        if (session.messages) {
+          try { parsedMessages = JSON.parse(session.messages); } catch {}
         }
-        return { success: true, session: null };
-      } catch (error) {
-        console.error('[SessionService] Error getting last session:', error);
-        return { success: false, error: error.message };
+        return { success: true, session: { ...session, sessionId: session.id, parsedMessages } };
       }
-    });
+      return { success: true, session: null };
+    }));
 
-    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_LAZY_RESUME, async (event, folderId, worktreeId, claudeSessionId, message) => {
-      try {
-        let sessionData;
-        if (claudeSessionId) {
-          const db = getDatabase();
-          const existingRow = db.prepare(`
-            SELECT id FROM claude_sessions
-            WHERE claude_session_id = ? AND status IN ('exited', 'stopped')
-            ORDER BY COALESCE(last_active_at, created_at) DESC LIMIT 1
-          `).get(claudeSessionId);
-          if (existingRow) {
-            sessionData = this.reactivateSession(existingRow.id, folderId, worktreeId);
-          } else {
-            sessionData = this.createSession(folderId, worktreeId);
-          }
+    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_LAZY_RESUME, w(async (event, folderId, worktreeId, claudeSessionId, message) => {
+      let sessionData;
+      if (claudeSessionId) {
+        const db = getDatabase();
+        const existingRow = db.prepare(`
+          SELECT id FROM claude_sessions
+          WHERE claude_session_id = ? AND status IN ('exited', 'stopped')
+          ORDER BY COALESCE(last_active_at, created_at) DESC LIMIT 1
+        `).get(claudeSessionId);
+        if (existingRow) {
+          sessionData = this.reactivateSession(existingRow.id, folderId, worktreeId);
         } else {
           sessionData = this.createSession(folderId, worktreeId);
         }
-        const { deletedSessionIds, reactivatedSessionId, ...session } = sessionData;
-        this.sendMessage(session.sessionId, message);
-        return { success: true, session, archivedSessionIds: deletedSessionIds, reactivatedSessionId };
-      } catch (error) {
-        console.error('[SessionService] Error in lazy resume:', error);
-        return { success: false, error: error.message };
+      } else {
+        sessionData = this.createSession(folderId, worktreeId);
       }
-    });
+      const { deletedSessionIds, reactivatedSessionId, ...session } = sessionData;
+      this.sendMessage(session.sessionId, message);
+      return { success: true, session, archivedSessionIds: deletedSessionIds, reactivatedSessionId };
+    }));
 
-    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_ARCHIVE, async (event, sessionId) => {
-      try {
-        this.archiveSession(sessionId);
-        return { success: true };
-      } catch (error) {
-        console.error('[SessionService] Error archiving session:', error);
-        return { success: false, error: error.message };
-      }
-    });
+    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_ARCHIVE, w(async (event, sessionId) => {
+      this.archiveSession(sessionId);
+      return { success: true };
+    }));
 
-    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_UNARCHIVE, async (event, sessionId) => {
-      try {
-        this.unarchiveSession(sessionId);
-        return { success: true };
-      } catch (error) {
-        console.error('[SessionService] Error unarchiving session:', error);
-        return { success: false, error: error.message };
-      }
-    });
+    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_UNARCHIVE, w(async (event, sessionId) => {
+      this.unarchiveSession(sessionId);
+      return { success: true };
+    }));
 
     ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_CHECK_ALIVE, async (event, sessionId) => {
       const alive = this.activeSessions.has(sessionId);
       return { alive };
     });
 
-    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_LIST_ARCHIVED, async (event, folderId, worktreeId) => {
-      try {
-        const sessions = this.listArchivedSessions(folderId, worktreeId);
-        return { success: true, sessions };
-      } catch (error) {
-        console.error('[SessionService] Error listing archived sessions:', error);
-        return { success: false, error: error.message };
-      }
-    });
+    ipcMain.handle(IPC_CHANNELS.CLAUDE_RENDERER_READY, w(async () => {
+      this.handleRendererReady();
+      return { success: true };
+    }));
 
-    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_RENAME, async (event, sessionId, title) => {
-      try {
-        this.renameSession(sessionId, title);
-        return { success: true };
-      } catch (error) {
-        console.error('[SessionService] Error renaming session:', error);
-        return { success: false, error: error.message };
-      }
-    });
+    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_GET_ACTIVE, w(async () => {
+      return { success: true, sessions: this.getActiveSessionList() };
+    }));
+
+    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_LIST_ARCHIVED, w(async (event, folderId, worktreeId) => {
+      const sessions = this.listArchivedSessions(folderId, worktreeId);
+      return { success: true, sessions };
+    }));
+
+    ipcMain.handle(IPC_CHANNELS.CLAUDE_SESSION_RENAME, w(async (event, sessionId, title) => {
+      this.renameSession(sessionId, title);
+      return { success: true };
+    }));
   }
 
   // ─── Cleanup ─────────────────────────────────────────────────────
@@ -229,6 +171,29 @@ class SessionService {
     const db = getDatabase();
     db.prepare("UPDATE claude_sessions SET status = 'stopped' WHERE status = 'active'").run();
     this.pendingPermissions.clear();
+  }
+
+  // ─── Auto-archive Helper ─────────────────────────────────────────
+
+  _autoArchiveOldSessions(folderId, worktreeId, excludeSessionId) {
+    const db = getDatabase();
+    const rows = db.prepare(`
+      SELECT id FROM claude_sessions
+      WHERE folder_id = ? AND worktree_id = ?
+        AND id != ?
+        AND status IN ('stopped', 'exited')
+        AND (archived = 0 OR archived IS NULL)
+    `).all(folderId, worktreeId, excludeSessionId);
+    if (rows.length > 0) {
+      db.prepare(`
+        UPDATE claude_sessions SET archived = 1
+        WHERE folder_id = ? AND worktree_id = ?
+          AND id != ?
+          AND status IN ('stopped', 'exited')
+          AND (archived = 0 OR archived IS NULL)
+      `).run(folderId, worktreeId, excludeSessionId);
+    }
+    return rows.map(r => r.id);
   }
 
   // ─── Session Creation ────────────────────────────────────────────
@@ -265,24 +230,7 @@ class SessionService {
       VALUES (?, ?, ?, 'active', ?, ?, 'app', CURRENT_TIMESTAMP)
     `).run(sessionId, folderId, worktreeId, sessionName, sessionId);
 
-    // Auto-archive older stopped/exited sessions on this worktree
-    const autoArchivedRows = db.prepare(`
-      SELECT id FROM claude_sessions
-      WHERE folder_id = ? AND worktree_id = ?
-        AND id != ?
-        AND status IN ('stopped', 'exited')
-        AND (archived = 0 OR archived IS NULL)
-    `).all(folderId, worktreeId, sessionId);
-    if (autoArchivedRows.length > 0) {
-      db.prepare(`
-        UPDATE claude_sessions SET archived = 1
-        WHERE folder_id = ? AND worktree_id = ?
-          AND id != ?
-          AND status IN ('stopped', 'exited')
-          AND (archived = 0 OR archived IS NULL)
-      `).run(folderId, worktreeId, sessionId);
-      archivedSessionIds = autoArchivedRows.map(r => r.id);
-    }
+    archivedSessionIds = this._autoArchiveOldSessions(folderId, worktreeId, sessionId);
 
     return {
       sessionId,
@@ -349,25 +297,7 @@ class SessionService {
       this.activeSessions.set(existingSessionId, claudeProcess);
     }
 
-    // Auto-archive other stopped/exited sessions on this worktree
-    let archivedSessionIds = [];
-    const autoArchivedRows = db.prepare(`
-      SELECT id FROM claude_sessions
-      WHERE folder_id = ? AND worktree_id = ?
-        AND id != ?
-        AND status IN ('stopped', 'exited')
-        AND (archived = 0 OR archived IS NULL)
-    `).all(folderId, worktreeId, existingSessionId);
-    if (autoArchivedRows.length > 0) {
-      db.prepare(`
-        UPDATE claude_sessions SET archived = 1
-        WHERE folder_id = ? AND worktree_id = ?
-          AND id != ?
-          AND status IN ('stopped', 'exited')
-          AND (archived = 0 OR archived IS NULL)
-      `).run(folderId, worktreeId, existingSessionId);
-      archivedSessionIds = autoArchivedRows.map(r => r.id);
-    }
+    const archivedSessionIds = this._autoArchiveOldSessions(folderId, worktreeId, existingSessionId);
 
     const sessionName = row.name || 'New Session';
 
@@ -389,13 +319,8 @@ class SessionService {
   // ─── SDK Session Factory ─────────────────────────────────────────
 
   _createSDKSession(sessionId, workingDir, options) {
-    const hiddenTools = [
-      'rename_session',
-      'mcp__bhunductor__rename_session'
-    ];
-
     const isHiddenTool = (toolName) => {
-      return hiddenTools.some(t => toolName === t || toolName.includes(t));
+      return HIDDEN_TOOLS.some(t => toolName === t || toolName.includes(t));
     };
 
     return new SDKSession(sessionId, workingDir, {
@@ -443,8 +368,8 @@ class SessionService {
       }
     }, {
       ...options,
-      permissionHandler: (sid, toolName, input, signal) => {
-        return this._sdkPermissionHandler(sid, toolName, input, signal);
+      permissionHandler: (sid, toolName, input, signal, extra) => {
+        return this._sdkPermissionHandler(sid, toolName, input, signal, extra);
       }
     });
   }
@@ -453,15 +378,15 @@ class SessionService {
    * Permission handler for SDK canUseTool callback.
    * Returns a Promise that resolves when the user responds via IPC.
    */
-  _sdkPermissionHandler(sessionId, toolName, input, signal) {
+  _sdkPermissionHandler(sessionId, toolName, input, signal, extra = {}) {
     return new Promise((resolve, reject) => {
       const requestId = uuidv4();
+      const { suggestions, decisionReason, blockedPath, toolUseID } = extra;
 
-      // Timeout after 5 minutes
       const timeoutId = setTimeout(() => {
         this.pendingPermissions.delete(requestId);
         resolve({ behavior: 'deny', message: 'Permission request timed out' });
-      }, 300000);
+      }, PERMISSION_TIMEOUT_MS);
 
       // Clean up if query is aborted
       const onAbort = () => {
@@ -483,6 +408,8 @@ class SessionService {
         },
         input, // Store original input for updatedInput in allow response
         sessionId,
+        toolName,
+        suggestions, // PermissionUpdate[] for "always allow"
         createdAt: Date.now()
       });
 
@@ -494,7 +421,9 @@ class SessionService {
             tool: toolName,
             input: input,
             session_id: sessionId,
-            tool_use_id: requestId
+            tool_use_id: toolUseID || requestId,
+            hasSuggestions: !!(suggestions && suggestions.length > 0),
+            decisionReason: decisionReason || null
           });
         }
       } catch {}
@@ -504,13 +433,8 @@ class SessionService {
   // ─── Legacy CLI Process Factory ──────────────────────────────────
 
   _spawnProcess(sessionId, workingDir, hasPreloadedMessages, options) {
-    const hiddenTools = [
-      'rename_session',
-      'mcp__bhunductor-permissions__rename_session'
-    ];
-
     const isHiddenTool = (toolName) => {
-      return hiddenTools.some(t => toolName === t || toolName.includes(t));
+      return HIDDEN_TOOLS.some(t => toolName === t || toolName.includes(t));
     };
 
     return new ClaudeProcess(sessionId, workingDir, {
@@ -587,13 +511,8 @@ class SessionService {
   // ─── Legacy MCP Permission Handling ──────────────────────────────
 
   handleMcpPermissionRequest(requestId, permissionData) {
-    const autoApprovedTools = [
-      'mcp__bhunductor-permissions__rename_session',
-      'rename_session'
-    ];
-
     const toolName = permissionData.tool || permissionData.tool_name || '';
-    if (autoApprovedTools.some(t => toolName.includes(t) || toolName === t)) {
+    if (HIDDEN_TOOLS.some(t => toolName.includes(t) || toolName === t)) {
       setImmediate(() => {
         this.permissionServer.respondToPermission(requestId, true);
       });
@@ -643,7 +562,7 @@ class SessionService {
     }
   }
 
-  respondToPermission(requestId, approved, message) {
+  respondToPermission(requestId, action, message) {
     const pending = this.pendingPermissions.get(requestId);
     if (!pending) {
       throw new Error(`Permission request ${requestId} not found`);
@@ -651,16 +570,39 @@ class SessionService {
 
     if (pending.isSDK) {
       // SDK path: resolve the Promise from canUseTool callback
-      if (approved) {
-        pending.resolve({ behavior: 'allow', updatedInput: pending.input || {} });
-      } else {
-        pending.resolve({
-          behavior: 'deny',
-          message: message || 'User denied permission'
-        });
+      // action is a string: 'allow', 'allow_always', 'deny', 'deny_with_message'
+      // For backward compat, also accept boolean true/false
+      const normalizedAction = action === true ? 'allow' : action === false ? 'deny' : action;
+
+      switch (normalizedAction) {
+        case 'allow':
+          pending.resolve({ behavior: 'allow', updatedInput: pending.input || {} });
+          break;
+        case 'allow_always':
+          pending.resolve({
+            behavior: 'allow',
+            updatedInput: pending.input || {},
+            updatedPermissions: pending.suggestions || []
+          });
+          break;
+        case 'deny':
+          pending.resolve({
+            behavior: 'deny',
+            message: 'User denied permission'
+          });
+          break;
+        case 'deny_with_message':
+          pending.resolve({
+            behavior: 'deny',
+            message: message || 'User denied permission'
+          });
+          break;
+        default:
+          pending.resolve({ behavior: 'deny', message: 'User denied permission' });
       }
     } else {
       // Legacy: forward to HTTP permission server
+      const approved = action === 'allow' || action === 'allow_always' || action === true;
       this.permissionServer.respondToPermission(requestId, approved, message);
       this.pendingPermissions.delete(requestId);
     }
@@ -681,6 +623,42 @@ class SessionService {
       }
       // For legacy mode, the process exit handler will send session-exited
     }
+  }
+
+  /**
+   * Called when the renderer (re)connects. Re-sends all pending permission requests.
+   */
+  handleRendererReady() {
+    for (const [requestId, pending] of this.pendingPermissions) {
+      if (!pending.isSDK) continue;
+      try {
+        if (!this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('claude:permission-request', {
+            requestId,
+            tool: pending.toolName || 'Unknown',
+            input: pending.input,
+            session_id: pending.sessionId,
+            tool_use_id: requestId,
+            hasSuggestions: !!(pending.suggestions && pending.suggestions.length > 0),
+            decisionReason: null
+          });
+        }
+      } catch {}
+    }
+  }
+
+  /**
+   * Returns list of active sessions with their running state.
+   */
+  getActiveSessionList() {
+    const sessions = [];
+    for (const [sessionId, session] of this.activeSessions) {
+      sessions.push({
+        sessionId,
+        isRunning: session.isRunning || false
+      });
+    }
+    return sessions;
   }
 
   handleSessionExit(sessionId, code) {
@@ -791,6 +769,25 @@ class SessionService {
       `).all(folderId);
     }
     return sessions.map(session => ({ ...session, sessionId: session.id }));
+  }
+
+  /**
+   * Save messages for all active sessions that have buffered history.
+   * Called on before-quit to persist any unsaved state.
+   */
+  saveAllActiveSessions() {
+    const db = getDatabase();
+    for (const [sessionId] of this.activeSessions) {
+      const messages = this.historyBuffer.get(sessionId);
+      if (messages && messages.length > 0) {
+        try {
+          db.prepare('UPDATE claude_sessions SET messages = ? WHERE id = ?')
+            .run(JSON.stringify(messages), sessionId);
+        } catch (err) {
+          console.error(`[SessionService] Failed to save messages for ${sessionId}:`, err.message);
+        }
+      }
+    }
   }
 
   destroy() {

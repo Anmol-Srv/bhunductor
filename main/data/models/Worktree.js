@@ -174,6 +174,22 @@ class Worktree {
   }
 
   /**
+   * Detect the package manager install command from lock files
+   */
+  static detectInstallCommand(projectPath) {
+    if (fs.existsSync(path.join(projectPath, 'bun.lock')) || fs.existsSync(path.join(projectPath, 'bun.lockb'))) {
+      return 'bun install --frozen-lockfile';
+    }
+    if (fs.existsSync(path.join(projectPath, 'pnpm-lock.yaml'))) {
+      return 'pnpm install --frozen-lockfile';
+    }
+    if (fs.existsSync(path.join(projectPath, 'yarn.lock'))) {
+      return 'yarn install --frozen-lockfile';
+    }
+    return 'npm ci';
+  }
+
+  /**
    * Run a git command safely
    */
   static runGitCommand(folderPath, command) {
@@ -291,6 +307,18 @@ class Worktree {
 
       if (!result.success) {
         throw new Error(`Failed to create git worktree: ${result.error || result.stderr}`);
+      }
+
+      // Install dependencies if a package.json exists
+      if (fs.existsSync(path.join(worktreePath, 'package.json'))) {
+        try {
+          const installCmd = this.detectInstallCommand(worktreePath);
+          console.log(`[Worktree] Installing dependencies: ${installCmd}`);
+          execSync(installCmd, { cwd: worktreePath, stdio: 'pipe', timeout: 120000 });
+          console.log('[Worktree] Dependencies installed');
+        } catch (installError) {
+          console.warn('[Worktree] Failed to install dependencies:', installError.message);
+        }
       }
 
       // Insert into database
@@ -416,6 +444,15 @@ class Worktree {
         if (!result.success) {
           console.warn('[Worktree] Git worktree remove failed, continuing with cleanup');
         }
+      }
+
+      // Delete the git branch
+      const branchResult = this.runGitCommand(
+        folder.path,
+        `git branch -D "${worktree.branch_name}"`
+      );
+      if (!branchResult.success) {
+        console.warn('[Worktree] Git branch delete failed:', branchResult.stderr);
       }
 
       // Delete from database

@@ -2,6 +2,7 @@ import useSessionStore from '../stores/sessionStore';
 import useUIStore from '../stores/uiStore';
 
 const HEALTH_CHECK_INTERVAL_MS = 5000;
+const AUTO_SAVE_INTERVAL_MS = 10000;
 
 /**
  * Set up all IPC event listeners that update Zustand stores.
@@ -130,13 +131,19 @@ export function setupIPCListeners() {
     }
   }));
 
-  // Permission requests
+  // Permission requests (deduplicate by requestId on reload recovery)
   unsubs.push(window.electron.on('claude:permission-request', (data) => {
     if (!data) return;
     const sessionId = data.session_id || data.sessionId;
     if (sessionId) {
       touch(sessionId);
-      useSessionStore.getState().addPermission(sessionId, data);
+      const store = useSessionStore.getState();
+      const queue = store.permissionQueues[sessionId] || [];
+      // Deduplicate: skip if requestId already in queue
+      if (data.requestId && queue.some(p => p.requestId === data.requestId)) {
+        return;
+      }
+      store.addPermission(sessionId, data);
     }
   }));
 
@@ -149,7 +156,9 @@ export function setupIPCListeners() {
     store.setStreaming(data.sessionId, false);
     store.updateMessages(data.sessionId, (prev) => [
       ...prev, {
-        id: crypto.randomUUID(), role: 'system', type: 'error', text: data.error
+        id: crypto.randomUUID(), role: 'system', type: 'error', text: data.error,
+        errorType: data.errorType || 'unknown',
+        isRecoverable: data.isRecoverable || false
       }
     ]);
   }));
@@ -205,8 +214,37 @@ export function setupIPCListeners() {
     }
   }, HEALTH_CHECK_INTERVAL_MS);
 
+  // --- Periodic auto-save ---
+  // Saves all sessions (including in-flight streaming text) every 10 seconds.
+  // This ensures messages survive app crashes, tab switches, and window reloads.
+  const autoSaveInterval = setInterval(() => {
+    useSessionStore.getState().saveAllSessions();
+  }, AUTO_SAVE_INTERVAL_MS);
+
+  // --- beforeunload: flush all messages to DB before window closes ---
+  const handleBeforeUnload = () => {
+    useSessionStore.getState().saveAllSessions();
+  };
+  window.addEventListener('beforeunload', handleBeforeUnload);
+
+  // Notify main process that renderer is (re)connected.
+  // This triggers re-sending of pending permissions and recovery of active session state.
+  window.electron.invoke('claude:renderer-ready').catch(() => {});
+  window.electron.invoke('claude:session-get-active').then(result => {
+    if (result?.success && result.sessions) {
+      const store = useSessionStore.getState();
+      for (const session of result.sessions) {
+        if (session.isRunning) {
+          store.setStreaming(session.sessionId, true);
+        }
+      }
+    }
+  }).catch(() => {});
+
   return () => {
     clearInterval(healthInterval);
+    clearInterval(autoSaveInterval);
+    window.removeEventListener('beforeunload', handleBeforeUnload);
     for (const unsub of unsubs) {
       unsub();
     }

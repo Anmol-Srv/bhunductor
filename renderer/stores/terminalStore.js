@@ -1,7 +1,5 @@
 import { create } from 'zustand';
 
-let terminalCounter = 0;
-
 const useTerminalStore = create((set, get) => ({
   terminalsByFolder: {},   // { folderId: [{ id, title }] }
   activeTerminalByFolder: {}, // { folderId: terminalId }
@@ -12,10 +10,9 @@ const useTerminalStore = create((set, get) => ({
   createTerminal: async (folderId, cwd) => {
     const result = await window.electron.invoke('terminal:create', { cwd });
     if (result.success) {
-      terminalCounter++;
       get().addTerminal(folderId, {
         id: result.terminalId,
-        title: `Terminal ${terminalCounter}`
+        title: 'Terminal'
       });
     }
     return result;
