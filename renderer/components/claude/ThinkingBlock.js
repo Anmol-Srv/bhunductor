@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronRight, ChevronDown } from 'lucide-react';
-
-const FRAMES = ['\u280B', '\u2819', '\u2839', '\u2838', '\u283C', '\u2834', '\u2826', '\u2827', '\u2807', '\u280F'];
+import { ChevronRight, ChevronDown, Brain, Loader } from 'lucide-react';
 
 function ThinkingBlock({ thinking, isPartial }) {
   const [expanded, setExpanded] = useState(false);
@@ -13,9 +11,8 @@ function ThinkingBlock({ thinking, isPartial }) {
     if (!isPartial) return;
     if (!startRef.current) startRef.current = Date.now();
     const id = setInterval(() => {
-      setFrame(f => (f + 1) % FRAMES.length);
       setElapsed(Math.floor((Date.now() - startRef.current) / 1000));
-    }, 80);
+    }, 1000);
     return () => clearInterval(id);
   }, [isPartial]);
 
@@ -34,9 +31,8 @@ function ThinkingBlock({ thinking, isPartial }) {
     <div className="thinking-line">
       <div className="thinking-line-header" onClick={() => setExpanded(!expanded)}>
         {expanded ? <ChevronDown size={12} className="thinking-chevron" /> : <ChevronRight size={12} className="thinking-chevron" />}
-        {isPartial
-          ? <span className="thinking-spinner">{FRAMES[frame]}</span>
-          : <span className="thinking-done">{'\u2713'}</span>}
+        <Brain size={13} className={`thinking-brain ${isPartial ? 'active' : 'done'}`} />
+        {isPartial && <Loader size={12} className="spinner thinking-loader" />}
         <span className="thinking-label">Thinking</span>
         {elapsed > 0 && (
           <span className="thinking-elapsed">{elapsed}s</span>

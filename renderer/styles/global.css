@@ -1796,6 +1796,28 @@ pre,
 
 /* Permission — rendered as bar above input, no wrapper needed */
 
+/* Scroll to bottom button */
+.scroll-to-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0 0 4px var(--spacing-md);
+  background: var(--surface-overlay);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.scroll-to-bottom:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
 /* ========================================
    Chat Input Area
    ======================================== */
@@ -1857,6 +1879,98 @@ pre,
   gap: 2px;
 }
 
+/* Model Selector */
+.model-selector {
+  position: relative;
+}
+
+.model-selector-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: transparent;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-sm);
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.model-selector-trigger:hover {
+  color: var(--ink-secondary);
+  border-color: var(--edge-strong);
+}
+
+.model-selector-chevron {
+  transition: transform var(--transition-fast);
+}
+
+.model-selector-chevron.open {
+  transform: rotate(180deg);
+}
+
+.model-selector-dropdown {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 4px;
+  background: var(--surface-overlay);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+  min-width: 120px;
+  overflow: hidden;
+}
+
+.model-selector-option {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  color: var(--ink-secondary);
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.model-selector-option:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+.model-selector-option.active {
+  color: var(--conductor);
+}
+
+/* Model switch notification */
+.model-switch-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  margin: 4px 0;
+}
+
+.model-switch-line {
+  flex: 1;
+  height: 1px;
+  background: var(--edge);
+}
+
+.model-switch-label {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--ink-muted);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
 
 /* Icon buttons (thinking, attach) */
 .input-icon-btn {
@@ -2327,8 +2441,8 @@ pre,
    Tool Call Group (collapsed multi-tool)
    ======================================== */
 .tool-call-group {
-  margin: 2px var(--spacing-lg);
-  border-left: 2px solid var(--edge-strong);
+  margin: 2px 0;
+  padding: 0 var(--spacing-lg);
 }
 
 .tool-call-group-header {
@@ -2464,17 +2578,21 @@ pre,
   flex-shrink: 0;
 }
 
-.thinking-spinner {
-  font-family: var(--font-mono);
-  font-size: var(--text-base);
-  color: var(--conductor);
+.thinking-brain {
   flex-shrink: 0;
 }
 
-.thinking-done {
-  font-size: var(--text-sm);
-  color: var(--ink-muted);
+.thinking-brain.active {
+  color: #d4a017;
+}
+
+.thinking-brain.done {
+  color: #d4a017;
+}
+
+.thinking-loader {
   flex-shrink: 0;
+  color: #d4a017;
 }
 
 .thinking-label {
@@ -2937,15 +3055,16 @@ pre,
 .file-tree-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px var(--spacing-sm);
+  gap: 5px;
+  padding: 2px var(--spacing-sm);
   cursor: pointer;
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   color: var(--ink-secondary);
   transition: background-color var(--transition-fast);
   white-space: nowrap;
   overflow: hidden;
-  line-height: 1.4;
+  line-height: 20px;
+  height: 24px;
 }
 
 .file-tree-row:hover {
@@ -2959,13 +3078,22 @@ pre,
   cursor: default;
 }
 
-.file-tree-icon {
+.file-tree-chevron {
   flex-shrink: 0;
   color: var(--ink-muted);
+  opacity: 0.6;
 }
 
-.file-tree-row.directory .file-tree-icon {
-  color: var(--conductor);
+.file-tree-row:hover .file-tree-chevron {
+  opacity: 1;
+}
+
+.file-tree-icon {
+  flex-shrink: 0;
+}
+
+.file-tree-row.directory .file-tree-name {
+  font-weight: 500;
 }
 
 .file-tree-name {
@@ -3022,7 +3150,7 @@ pre,
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: 5px var(--spacing-sm);
+  padding: 5px var(--spacing-md);
   cursor: pointer;
   font-size: var(--text-base);
   color: var(--ink-secondary);
@@ -3568,13 +3696,14 @@ pre,
 
 
 /* ========================================
-   Checks Panel
+   Checks Panel — Todo List Style
    ======================================== */
 .checks-panel {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: var(--spacing-sm);
+  padding: var(--spacing-md);
+  gap: var(--spacing-sm);
 }
 
 .checks-loading,
@@ -3591,69 +3720,54 @@ pre,
   color: var(--gate-deny);
 }
 
-.checks-list {
+/* Todo list */
+.todo-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   flex: 1;
 }
 
-.check-item {
+.todo-item {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-start;
   gap: var(--spacing-sm);
-  padding: 10px 10px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-overlay);
-  border: 1px solid var(--edge);
+  padding: var(--spacing-sm) 0;
 }
 
-.check-item-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.check-item-icon {
-  width: 26px;
-  height: 26px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.todo-checkbox {
   flex-shrink: 0;
+  padding-top: 1px;
 }
 
-.check-icon-warn {
-  background: rgba(212, 160, 23, 0.12);
-  color: var(--gate-caution);
+.todo-check-pending {
+  color: var(--ink-muted);
 }
 
-.check-icon-info {
-  background: var(--conductor-muted);
-  color: var(--conductor);
-}
-
-.check-icon-success {
-  background: rgba(34, 197, 94, 0.10);
+.todo-check-done {
   color: var(--stream-live);
 }
 
-.check-icon-merged {
-  background: rgba(163, 113, 247, 0.10);
-  color: #a371f7;
-}
-
-.check-item-text {
+.todo-content {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  min-width: 0;
+  gap: 2px;
 }
 
-.check-item-label {
+.todo-label-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.todo-icon {
+  flex-shrink: 0;
+  color: var(--ink-muted);
+}
+
+.todo-label {
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--ink);
@@ -3662,22 +3776,27 @@ pre,
   text-overflow: ellipsis;
 }
 
-.check-item-sublabel {
-  font-size: var(--text-sm);
+.todo-item.done .todo-label {
+  color: var(--ink-secondary);
+}
+
+.todo-sublabel {
+  font-size: var(--text-xs);
   color: var(--ink-muted);
   font-family: var(--font-mono);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  padding-left: 18px;
 }
 
-.check-item-btn {
-  padding: var(--spacing-xs) var(--spacing-sm);
-  background: var(--surface-hover);
+.todo-action-btn {
+  padding: 3px var(--spacing-sm);
+  background: transparent;
   border: 1px solid var(--edge-strong);
   border-radius: var(--radius-sm);
-  color: var(--ink);
-  font-size: var(--text-sm);
+  color: var(--ink-secondary);
+  font-size: var(--text-xs);
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
@@ -3686,35 +3805,36 @@ pre,
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
+  margin-top: 1px;
 }
 
-.check-item-btn:hover:not(:disabled) {
+.todo-action-btn:hover:not(:disabled) {
   background: var(--conductor-muted);
   border-color: var(--conductor);
   color: var(--conductor);
 }
 
-.check-item-btn:disabled {
+.todo-action-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
+/* PR form — minimal inline inputs */
 .checks-pr-form {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
-  margin-top: var(--spacing-sm);
-  padding-top: var(--spacing-sm);
-  border-top: 1px solid var(--edge);
+  padding-left: 24px;
 }
 
 .checks-pr-input,
 .checks-pr-textarea {
   width: 100%;
-  padding: 6px var(--spacing-sm);
-  background: var(--surface-overlay);
-  border: 1px solid var(--edge);
-  border-radius: var(--radius-sm);
+  padding: 5px 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--edge);
+  border-radius: 0;
   color: var(--ink);
   font-size: var(--text-sm);
   font-family: inherit;
@@ -3730,17 +3850,16 @@ pre,
 .checks-pr-input:focus,
 .checks-pr-textarea:focus {
   outline: none;
-  border-color: var(--conductor);
+  border-bottom-color: var(--conductor);
 }
 
 .checks-pr-textarea {
   line-height: 1.4;
-  min-height: 60px;
+  min-height: 40px;
 }
 
-
 .checks-no-session {
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   color: var(--ink-muted);
   text-align: center;
   padding: var(--spacing-sm) 0;
@@ -3751,12 +3870,12 @@ pre,
   align-items: center;
   justify-content: center;
   gap: var(--spacing-xs);
-  margin-top: var(--spacing-sm);
+  margin-top: auto;
   padding: 5px;
   background: none;
   border: none;
   color: var(--ink-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   cursor: pointer;
   border-radius: var(--radius-sm);
   transition: all var(--transition-fast);
@@ -3768,9 +3887,9 @@ pre,
 }
 
 .post-merge-actions {
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: var(--spacing-sm);
   background: rgba(163, 113, 247, 0.06);
-  border-bottom: 1px solid rgba(163, 113, 247, 0.15);
+  border-radius: var(--radius-sm);
 }
 
 .post-merge-title {

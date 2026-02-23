@@ -1,24 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { GitCommit, GitPullRequest, GitMerge, CheckCircle2, RefreshCw, Loader } from 'lucide-react';
+import { GitCommit, GitPullRequest, GitMerge, CheckCircle2, Circle, RefreshCw, Loader } from 'lucide-react';
 import { buildCommitInstructions, buildCreatePRInstructions, buildMergePRInstructions } from '../../shared/instructionTemplates';
 import useSessionStore from '../stores/sessionStore';
 import useChecksStore from '../stores/checksStore';
 
-function CheckItem({ icon: Icon, iconClass, label, sublabel, actionLabel, onAction, sending }) {
+function TodoItem({ done, icon: Icon, label, sublabel, actionLabel, onAction, sending }) {
   return (
-    <div className="check-item">
-      <div className="check-item-left">
-        <div className={`check-item-icon ${iconClass}`}>
-          <Icon size={15} />
+    <div className={`todo-item ${done ? 'done' : ''}`}>
+      <div className="todo-checkbox">
+        {done
+          ? <CheckCircle2 size={16} className="todo-check-done" />
+          : <Circle size={16} className="todo-check-pending" />
+        }
+      </div>
+      <div className="todo-content">
+        <div className="todo-label-row">
+          <Icon size={13} className="todo-icon" />
+          <span className="todo-label">{label}</span>
         </div>
-        <div className="check-item-text">
-          <span className="check-item-label">{label}</span>
-          {sublabel && <span className="check-item-sublabel">{sublabel}</span>}
-        </div>
+        {sublabel && <span className="todo-sublabel">{sublabel}</span>}
       </div>
       {actionLabel && (
         <button
-          className="check-item-btn"
+          className="todo-action-btn"
           onClick={onAction}
           disabled={sending}
         >
@@ -39,7 +43,6 @@ function ChecksPanel({ folderId, worktreeId, activeSessionId, onChecksUpdate }) 
   const { checksByWorktree, fetchChecks, setPostActionRefresh } = useChecksStore();
   const checks = checksByWorktree[worktreeId] || null;
 
-  // Notify parent when checks data changes
   useEffect(() => {
     if (checks) onChecksUpdate?.(checks);
   }, [checks]);
@@ -54,10 +57,8 @@ function ChecksPanel({ folderId, worktreeId, activeSessionId, onChecksUpdate }) 
     if (!activeSessionId) return;
     setSending(actionKey);
     try {
-      // Fetch fresh checks before building instructions (ensures accurate state)
       await fetchChecks(folderId, worktreeId);
       await sendInstruction(activeSessionId, instructions, meta);
-      // Start fast-polling window after git action
       setPostActionRefresh(worktreeId);
     } finally {
       setSending(null);
@@ -80,85 +81,16 @@ function ChecksPanel({ folderId, worktreeId, activeSessionId, onChecksUpdate }) 
   const noSession = !activeSessionId;
   const showPR = !openPR && !isMainBranch && !mergedPR;
 
-  const items = [];
-
-  if (uncommittedCount > 0) {
-    items.push(
-      <CheckItem
-        key="commit"
-        icon={GitCommit}
-        iconClass="check-icon-warn"
-        label={`${uncommittedCount} uncommitted change${uncommittedCount !== 1 ? 's' : ''}`}
-        sublabel={branch}
-        actionLabel="Commit"
-        sending={sending === 'commit'}
-        onAction={() => handleAction('commit',
-          buildCommitInstructions(checks),
-          { action: 'commit', label: 'Commit Changes', fileName: 'Commit instructions.md' }
-        )}
-      />
-    );
-  }
-
-  if (showPR) {
-    items.push(
-      <CheckItem
-        key="pr"
-        icon={GitPullRequest}
-        iconClass="check-icon-info"
-        label="Create pull request"
-        sublabel={`${branch} → ${defaultBranch}`}
-        actionLabel="Create PR"
-        sending={sending === 'pr'}
-        onAction={() => handleAction('pr',
-          buildCreatePRInstructions(checks, { prTitle: prTitle.trim(), prDescription: prDescription.trim() }),
-          { action: 'create-pr', label: 'Create a PR', fileName: 'PR instructions.md' }
-        )}
-      />
-    );
-  }
-
-  if (openPR) {
-    items.push(
-      <CheckItem
-        key="merge"
-        icon={GitMerge}
-        iconClass="check-icon-success"
-        label={`PR #${openPR.number} open`}
-        sublabel={openPR.title}
-        actionLabel="Merge PR"
-        sending={sending === 'merge'}
-        onAction={() => handleAction('merge',
-          buildMergePRInstructions(checks),
-          { action: 'merge-pr', label: 'Merge PR', fileName: 'Merge instructions.md' }
-        )}
-      />
-    );
-  }
-
-  if (mergedPR) {
-    items.push(
-      <CheckItem
-        key="merged"
-        icon={GitMerge}
-        iconClass="check-icon-merged"
-        label={`PR #${mergedPR.number} merged`}
-        sublabel={mergedPR.title}
-      />
-    );
-  }
-
   return (
     <div className="checks-panel">
-      {/* Post-merge guidance */}
       {mergedPR && (
         <div className="post-merge-actions">
-          <div className="post-merge-title">Branch merged — next steps:</div>
+          <div className="post-merge-title">Branch merged</div>
           <div className="post-merge-hint">Switch to <strong>{defaultBranch}</strong> and pull, or delete this branch.</div>
         </div>
       )}
 
-      {/* PR metadata inputs — visible when Create PR action is available */}
+      {/* PR form — minimal inline inputs */}
       {showPR && (
         <div className="checks-pr-form">
           <input
@@ -173,27 +105,79 @@ function ChecksPanel({ folderId, worktreeId, activeSessionId, onChecksUpdate }) 
             placeholder="PR description (optional)"
             value={prDescription}
             onChange={e => setPrDescription(e.target.value)}
-            rows={3}
+            rows={2}
           />
         </div>
       )}
 
-      <div className="checks-list">
+      <div className="todo-list">
+        {/* Commit check */}
+        <TodoItem
+          done={uncommittedCount === 0}
+          icon={GitCommit}
+          label={uncommittedCount > 0
+            ? `${uncommittedCount} uncommitted change${uncommittedCount !== 1 ? 's' : ''}`
+            : 'All changes committed'
+          }
+          sublabel={branch}
+          actionLabel={uncommittedCount > 0 ? 'Commit' : null}
+          sending={sending === 'commit'}
+          onAction={() => handleAction('commit',
+            buildCommitInstructions(checks),
+            { action: 'commit', label: 'Commit Changes', fileName: 'Commit instructions.md' }
+          )}
+        />
+
+        {/* PR check */}
+        {showPR && (
+          <TodoItem
+            done={false}
+            icon={GitPullRequest}
+            label="Create pull request"
+            sublabel={`${branch} → ${defaultBranch}`}
+            actionLabel="Create PR"
+            sending={sending === 'pr'}
+            onAction={() => handleAction('pr',
+              buildCreatePRInstructions(checks, { prTitle: prTitle.trim(), prDescription: prDescription.trim() }),
+              { action: 'create-pr', label: 'Create a PR', fileName: 'PR instructions.md' }
+            )}
+          />
+        )}
+
+        {openPR && (
+          <TodoItem
+            done={false}
+            icon={GitMerge}
+            label={`PR #${openPR.number} open`}
+            sublabel={openPR.title}
+            actionLabel="Merge PR"
+            sending={sending === 'merge'}
+            onAction={() => handleAction('merge',
+              buildMergePRInstructions(checks),
+              { action: 'merge-pr', label: 'Merge PR', fileName: 'Merge instructions.md' }
+            )}
+          />
+        )}
+
+        {mergedPR && (
+          <TodoItem
+            done={true}
+            icon={GitMerge}
+            label={`PR #${mergedPR.number} merged`}
+            sublabel={mergedPR.title}
+          />
+        )}
+
+        {/* Clean state on main */}
         {uncommittedCount === 0 && unpushedCount === 0 && !openPR && isMainBranch && (
-          <CheckItem
-            key="clean"
+          <TodoItem
+            done={true}
             icon={CheckCircle2}
-            iconClass="check-icon-success"
             label="Working tree clean"
             sublabel={branch}
           />
         )}
-        {items}
       </div>
-
-      {noSession && (
-        <div className="checks-no-session">Start a session to use git actions</div>
-      )}
 
       <button className="checks-refresh" onClick={handleRefresh} disabled={refreshing}>
         <RefreshCw size={12} className={refreshing ? 'spinner' : ''} />

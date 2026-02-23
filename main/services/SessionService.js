@@ -5,7 +5,7 @@ const Folder = require('../data/models/Folder');
 const ClaudeProcess = require('../claude/ClaudeProcess');
 const SDKSession = require('../claude/SDKSession');
 const PermissionHttpServer = require('../mcp/PermissionHttpServer');
-const { IPC_CHANNELS, PERMISSION_TIMEOUT_MS, HIDDEN_TOOLS } = require('../../shared/constants');
+const { IPC_CHANNELS, HIDDEN_TOOLS } = require('../../shared/constants');
 const { wrapHandler } = require('../utils/ipc-handler');
 
 const w = (fn) => wrapHandler('SessionService', fn);
@@ -86,8 +86,8 @@ class SessionService {
       return { success: true, sessions };
     }));
 
-    ipcMain.handle(IPC_CHANNELS.CLAUDE_SEND_MESSAGE, w(async (event, sessionId, message) => {
-      this.sendMessage(sessionId, message);
+    ipcMain.handle(IPC_CHANNELS.CLAUDE_SEND_MESSAGE, w(async (event, sessionId, message, model) => {
+      this.sendMessage(sessionId, message, model || undefined);
       return { success: true };
     }));
 
@@ -383,14 +383,11 @@ class SessionService {
       const requestId = uuidv4();
       const { suggestions, decisionReason, blockedPath, toolUseID } = extra;
 
-      const timeoutId = setTimeout(() => {
-        this.pendingPermissions.delete(requestId);
-        resolve({ behavior: 'deny', message: 'Permission request timed out' });
-      }, PERMISSION_TIMEOUT_MS);
+      // No timeout — permissions wait indefinitely for user response.
+      // Cleanup is handled by: abort signal (session stop), session destroy (app quit).
 
       // Clean up if query is aborted
       const onAbort = () => {
-        clearTimeout(timeoutId);
         this.pendingPermissions.delete(requestId);
         resolve({ behavior: 'deny', message: 'Session aborted' });
       };
@@ -401,7 +398,6 @@ class SessionService {
       this.pendingPermissions.set(requestId, {
         isSDK: true,
         resolve: (result) => {
-          clearTimeout(timeoutId);
           if (signal) signal.removeEventListener('abort', onAbort);
           this.pendingPermissions.delete(requestId);
           resolve(result);
@@ -546,7 +542,7 @@ class SessionService {
 
   // ─── Session Operations ──────────────────────────────────────────
 
-  sendMessage(sessionId, message) {
+  sendMessage(sessionId, message, model) {
     const session = this.activeSessions.get(sessionId);
     if (!session) {
       throw new Error(`Session ${sessionId} not found`);
@@ -554,7 +550,7 @@ class SessionService {
 
     if (this.useSDK) {
       // SDK: fire-and-forget the query. Callbacks stream results back.
-      session.runQuery(message).catch((err) => {
+      session.runQuery(message, model || undefined).catch((err) => {
         console.error('[SessionService] SDK query error:', err.message);
       });
     } else {
@@ -565,7 +561,10 @@ class SessionService {
   respondToPermission(requestId, action, message) {
     const pending = this.pendingPermissions.get(requestId);
     if (!pending) {
-      throw new Error(`Permission request ${requestId} not found`);
+      // Permission already resolved (timed out or session stopped) — return gracefully
+      // so the renderer can clean up its queue
+      console.warn(`[SessionService] Permission request ${requestId} already resolved (likely timed out)`);
+      return;
     }
 
     if (pending.isSDK) {
@@ -611,6 +610,9 @@ class SessionService {
   stopSession(sessionId) {
     const session = this.activeSessions.get(sessionId);
     if (session) {
+      // Clean up any pending permissions for this session before stopping
+      this._clearPendingPermissions(sessionId);
+
       session.stop();
       this.activeSessions.delete(sessionId);
       this.historyBuffer.delete(sessionId);
@@ -623,6 +625,23 @@ class SessionService {
       }
       // For legacy mode, the process exit handler will send session-exited
     }
+  }
+
+  /**
+   * Clear all pending permissions for a session. Resolves each with deny
+   * and notifies the renderer to dismiss the prompts.
+   */
+  _clearPendingPermissions(sessionId) {
+    for (const [requestId, pending] of this.pendingPermissions) {
+      if (pending.sessionId === sessionId) {
+        if (pending.isSDK && pending.resolve) {
+          pending.resolve({ behavior: 'deny', message: 'Session stopped' });
+        }
+        this.pendingPermissions.delete(requestId);
+      }
+    }
+    // Tell renderer to clear the entire permission queue for this session
+    this.send('claude:permission-dismissed', { sessionId, reason: 'session_stopped', clearAll: true });
   }
 
   /**
