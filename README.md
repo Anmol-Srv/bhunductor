@@ -24,35 +24,7 @@ Bhunductor gives Claude Code a proper home. It's a native macOS app that wraps t
 
 **Open a repo. Pick a branch. Talk to Claude. See everything.**
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  ← Repo Name                                          ◉ ◉ ◉   │
-├────────────┬────────────────────────────────┬───────────────────┤
-│            │  Session 1  │  Session 2  │ +  │                   │
-│  main    ▾ │─────────────────────────────────│   src/            │
-│  ├ feat-a  │                                 │   ├── index.js    │
-│  ├ feat-b  │  You: Fix the auth bug in       │   ├── auth/       │
-│  └ fix-c   │  the login flow                 │   │   ├── login.js│
-│            │                                 │   │   └── ...     │
-│  Sessions  │  ◐ Thinking...                  │   ├── utils/      │
-│  ├ Fix auth│                                 │   └── ...         │
-│  ├ Add API │  Claude: I'll look at the       │                   │
-│  └ Refactor│  login handler. Let me read     │                   │
-│            │  the file first.                │                   │
-│            │                                 │                   │
-│            │  ▸ Read src/auth/login.js       │                   │
-│            │  ▸ Edit src/auth/login.js       │                   │
-│            │    ✓ Approved                   │                   │
-│            │                                 │                   │
-│            │  The bug was in the token       │                   │
-│            │  validation...                  │                   │
-│            │                                 │                   │
-│            │  ─── $0.03 · 2.4k tokens ───   │                   │
-│            │                                 │                   │
-├────────────┤  [Type a message...]            ├───────────────────┤
-│  ▸ Terminal                                  │                   │
-└─────────────────────────────────────────────────────────────────┘
-```
+https://x.com/Anmol_Srv/status/2026038956329173110/photo/1
 
 ### Branch-First Workflow
 
