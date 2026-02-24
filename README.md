@@ -24,7 +24,9 @@ Bhunductor gives Claude Code a proper home. It's a native macOS app that wraps t
 
 **Open a repo. Pick a branch. Talk to Claude. See everything.**
 
-https://x.com/Anmol_Srv/status/2026038956329173110/photo/1
+<p align="center">
+<img src="https://pbs.twimg.com/media/HB3usTEacAAf-pK?format=jpg&name=4096x4096" height="480" style="max-width: 100%;"/>
+</p>
 
 ### Branch-First Workflow
 
