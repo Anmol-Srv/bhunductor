@@ -147,6 +147,19 @@ export function setupIPCListeners() {
     }
   }));
 
+  // Permission dismissed (timeout or session stopped)
+  unsubs.push(window.electron.on('claude:permission-dismissed', (data) => {
+    if (!data) return;
+    const sessionId = data.session_id || data.sessionId;
+    if (!sessionId) return;
+    const store = useSessionStore.getState();
+    if (data.clearAll) {
+      store.clearPermissions(sessionId);
+    } else if (data.requestId) {
+      store.removePermission(sessionId, data.requestId);
+    }
+  }));
+
   // Session errors
   unsubs.push(window.electron.on('claude:session-error', (data) => {
     if (!data?.sessionId) return;

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
-import { Send, Square, Copy, Check } from 'lucide-react';
+import { ArrowRight, ArrowDown, Pause, Copy, Check, ChevronDown } from 'lucide-react';
+import { CLAUDE_MODELS, DEFAULT_MODEL } from '../../../shared/constants';
 import MarkdownRenderer from './MarkdownRenderer';
 import ToolUseBlock from './ToolUseBlock';
 import ToolCallGroup from './ToolCallGroup';
@@ -27,15 +28,66 @@ const ActiveStreamBlock = memo(({ sessionId }) => {
   );
 });
 
+const ModelSelector = memo(({ selectedModel, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  const current = CLAUDE_MODELS.find(m => m.id === selectedModel) || CLAUDE_MODELS[0];
+
+  return (
+    <div className="model-selector" ref={ref}>
+      <button
+        className="model-selector-trigger"
+        onClick={() => setOpen(!open)}
+        type="button"
+      >
+        <span className="model-selector-label">{current.label}</span>
+        <ChevronDown size={12} className={`model-selector-chevron ${open ? 'open' : ''}`} />
+      </button>
+      {open && (
+        <div className="model-selector-dropdown">
+          {CLAUDE_MODELS.map(m => (
+            <button
+              key={m.id}
+              className={`model-selector-option ${m.id === selectedModel ? 'active' : ''}`}
+              onClick={() => { onChange(m.id); setOpen(false); }}
+              type="button"
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
 const ChatInputBox = memo(({
+  sessionId,
   onSend,
   onStop,
   isStreaming,
   isReadOnly,
-  placeholderText
+  placeholderText,
+  defaultModel
 }) => {
   const [input, setInput] = useState('');
   const textareaRef = useRef(null);
+
+  const storeModel = useSessionStore(s => s.sessionModels[sessionId]);
+  const selectedModel = storeModel || defaultModel || DEFAULT_MODEL;
+  const setSelectedModel = useCallback((modelId) => {
+    useSessionStore.getState().setSessionModel(sessionId, modelId);
+  }, [sessionId]);
 
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
@@ -50,7 +102,7 @@ const ChatInputBox = memo(({
 
   const handleSendMessage = () => {
     if (!input.trim()) return;
-    onSend(input.trim());
+    onSend(input.trim(), selectedModel);
     setInput('');
   };
 
@@ -72,14 +124,16 @@ const ChatInputBox = memo(({
           rows={1}
         />
         <div className="chat-input-toolbar">
-          <div className="chat-input-toolbar-left" />
+          <div className="chat-input-toolbar-left">
+            <ModelSelector selectedModel={selectedModel} onChange={setSelectedModel} />
+          </div>
           {isStreaming ? (
             <button
               className="chat-stop-btn"
               onClick={onStop}
               title="Stop generating"
             >
-              <Square size={12} />
+              <Pause size={14} />
             </button>
           ) : (
             <button
@@ -87,7 +141,7 @@ const ChatInputBox = memo(({
               onClick={handleSendMessage}
               disabled={!input.trim()}
             >
-              <Send size={14} />
+              <ArrowRight size={16} />
             </button>
           )}
         </div>
@@ -110,9 +164,17 @@ function ClaudeChat({
   model = 'Opus 4.6'
 }) {
   const [copiedId, setCopiedId] = useState(null);
+  const [defaultModel, setDefaultModel] = useState(DEFAULT_MODEL);
+  const [isAtBottom, setIsAtBottom] = useState(true);
   const messagesEndRef = useRef(null);
   const chatFeedRef = useRef(null);
   const shouldAutoScrollRef = useRef(true);
+
+  useEffect(() => {
+    window.electron.invoke('config:get', 'defaultModel').then(r => {
+      if (r?.success && r.value) setDefaultModel(r.value);
+    });
+  }, []);
 
   // Single shallow-compared subscription to avoid infinite re-render loops
   const { _version, isStreaming, permissionQueue } = useSessionStore(
@@ -167,6 +229,7 @@ function ClaudeChat({
       // Consider "at bottom" if within 100px of bottom
       const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
       shouldAutoScrollRef.current = isNearBottom;
+      setIsAtBottom(isNearBottom);
     };
 
     chatFeed.addEventListener('scroll', handleScroll);
@@ -198,7 +261,7 @@ function ClaudeChat({
     await useSessionStore.getState().stopSession(sessionId);
   }, [sessionId]);
 
-  const handleSendMessage = async (userMessage) => {
+  const handleSendMessage = async (userMessage, selectedModel) => {
     // Always auto-scroll when sending a new message
     shouldAutoScrollRef.current = true;
 
@@ -210,11 +273,22 @@ function ClaudeChat({
       return;
     }
 
+    // Check if model changed mid-conversation and insert a notification
+    const { lastSentModels, markModelSent } = useSessionStore.getState();
+    const prevModel = lastSentModels[sessionId];
+    if (prevModel && prevModel !== selectedModel) {
+      const modelLabel = CLAUDE_MODELS.find(m => m.id === selectedModel)?.label || selectedModel;
+      updateMessages(sessionId, prev => [...prev, {
+        id: crypto.randomUUID(), type: 'model_switch', modelId: selectedModel, modelLabel
+      }]);
+    }
+    markModelSent(sessionId, selectedModel);
+
     updateMessages(sessionId, prev => [...prev, {
       id: crypto.randomUUID(), role: 'user', type: 'text', text: userMessage
     }]);
 
-    const result = await sendMessage(sessionId, userMessage);
+    const result = await sendMessage(sessionId, userMessage, selectedModel);
     if (!result.success) {
       updateMessages(sessionId, prev => [...prev, {
         id: crypto.randomUUID(), role: 'system', type: 'error',
@@ -351,6 +425,15 @@ function ClaudeChat({
           </div>
         );
 
+      case 'model_switch':
+        return (
+          <div key={msg.id || idx} className="model-switch-notice">
+            <span className="model-switch-line" />
+            <span className="model-switch-label">switched to {msg.modelLabel}</span>
+            <span className="model-switch-line" />
+          </div>
+        );
+
       default:
         if (msg.role === 'user') {
           return (
@@ -401,14 +484,6 @@ function ClaudeChat({
   return (
     <div className="claude-chat">
       <div className="chat-feed" ref={chatFeedRef}>
-        {!isReadOnly && (
-          <WelcomeBanner
-            model={model}
-            branchName={branchName}
-            folderName={folderName}
-          />
-        )}
-
         {renderItems.map((item, idx) => {
           if (item.type === 'tool_group') {
             return <ToolCallGroup key={`tg-${idx}`} tools={item.tools} />;
@@ -494,12 +569,27 @@ function ClaudeChat({
         />
       )}
 
+      {!isAtBottom && (
+        <button
+          className="scroll-to-bottom"
+          onClick={() => {
+            shouldAutoScrollRef.current = true;
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }}
+          title="Scroll to bottom"
+        >
+          <ArrowDown size={14} />
+        </button>
+      )}
+
       <ChatInputBox
+        sessionId={sessionId}
         onSend={handleSendMessage}
         onStop={handleStopSession}
         isStreaming={isStreaming}
         isReadOnly={isReadOnly}
         placeholderText={placeholderText}
+        defaultModel={defaultModel}
       />
     </div>
   );

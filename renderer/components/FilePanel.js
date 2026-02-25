@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { FolderClosed, FolderOpen, ChevronRight, ChevronDown, Files, GitCommit, CheckCircle2, GitPullRequest, GitMerge, ExternalLink, Loader } from 'lucide-react';
-import { getFileIcon } from '../utils/fileIcons';
+import { getFileIcon, getFileIconColor, getFolderColor } from '../utils/fileIcons';
 import ChecksPanel from './ChecksPanel';
 import useChecksStore from '../stores/checksStore';
 import useSessionStore from '../stores/sessionStore';
@@ -131,6 +131,7 @@ function FilePanel({ collapsed, onToggle, folderId, worktreeId, activeSessionId,
 
     if (node.isDirectory) {
       const isExpanded = expandedPaths.has(node.relativePath);
+      const folderColor = getFolderColor(node.name);
       return (
         <div key={node.path}>
           <div
@@ -138,8 +139,11 @@ function FilePanel({ collapsed, onToggle, folderId, worktreeId, activeSessionId,
             style={{ paddingLeft: depth * 16 + 10 }}
             onClick={() => toggleExpand(node.relativePath)}
           >
-            {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            {isExpanded ? <FolderOpen size={16} className="file-tree-icon" /> : <FolderClosed size={16} className="file-tree-icon" />}
+            {isExpanded ? <ChevronDown size={12} className="file-tree-chevron" /> : <ChevronRight size={12} className="file-tree-chevron" />}
+            {isExpanded
+              ? <FolderOpen size={15} className="file-tree-icon" style={{ color: folderColor }} />
+              : <FolderClosed size={15} className="file-tree-icon" style={{ color: folderColor }} />
+            }
             <span className="file-tree-name">{node.name}</span>
           </div>
           {isExpanded && node.children && node.children.map(child => renderTreeNode(child, depth + 1))}
@@ -149,14 +153,15 @@ function FilePanel({ collapsed, onToggle, folderId, worktreeId, activeSessionId,
 
     const status = gitStatusMap[node.relativePath];
     const FileIcon = getFileIcon(node.name);
+    const fileColor = getFileIconColor(node.name);
     return (
       <div
         key={node.path}
-        className="file-tree-row file"
+        className={`file-tree-row file ${status ? 'has-changes' : ''}`}
         style={{ paddingLeft: depth * 16 + 10 }}
         onClick={() => handleFileClick(node)}
       >
-        <FileIcon size={16} className="file-tree-icon" />
+        <FileIcon size={15} className="file-tree-icon" style={{ color: fileColor }} />
         <span className="file-tree-name">{node.name}</span>
         {renderGitBadge(status)}
       </div>
@@ -264,13 +269,14 @@ function FilePanel({ collapsed, onToggle, folderId, worktreeId, activeSessionId,
               changedFiles.map(file => {
                 const fileName = file.path.split('/').pop();
                 const FileIcon = getFileIcon(fileName);
+                const fileColor = getFileIconColor(fileName);
                 return (
                   <div
                     key={file.path}
                     className="changes-row"
                     onClick={() => handleChangedFileClick(file)}
                   >
-                    <FileIcon size={16} className="file-tree-icon" />
+                    <FileIcon size={15} className="file-tree-icon" style={{ color: fileColor }} />
                     {renderGitBadge(file.status)}
                     <span className="changes-path">{file.path}</span>
                     {(file.additions > 0 || file.deletions > 0) && (

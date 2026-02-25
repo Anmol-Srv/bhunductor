@@ -89,7 +89,7 @@ class SDKSession {
    * Run a query for a single user message.
    * The SDK handles the full agentic loop internally.
    */
-  async runQuery(prompt) {
+  async runQuery(prompt, model) {
     if (this.isRunning) {
       console.warn('[SDKSession] Query already running for session', this.sessionId);
       return;
@@ -125,7 +125,10 @@ class SDKSession {
       pathToClaudeCodeExecutable: getClaudePath()
     };
 
-    if (this.options.model) {
+    // Per-query model override takes precedence over session-level default
+    if (model) {
+      queryOptions.model = model;
+    } else if (this.options.model) {
       queryOptions.model = this.options.model;
     }
 

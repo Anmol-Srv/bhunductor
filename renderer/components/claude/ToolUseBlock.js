@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronRight, ChevronDown, Loader, Check, X, Terminal, Eye, Pencil, FolderOpen, Search, Globe, FileText } from 'lucide-react';
+import { ChevronRight, ChevronDown, Loader, X, Terminal, Eye, Pencil, FolderOpen, Search, Globe, FileText } from 'lucide-react';
 
 const TOOL_ICON_MAP = {
   'Bash': { icon: Terminal, color: 'var(--gate-caution)' },
@@ -51,18 +51,10 @@ function ToolUseBlock({ toolName, toolInput, toolUseId, status, result, isError 
   const toolIcon = getToolIcon(toolName);
   const ToolTypeIcon = toolIcon.icon;
 
-  const statusIcon = () => {
-    switch (status) {
-      case 'running':
-        return <Loader size={12} className="spinner tool-status-icon running" />;
-      case 'complete':
-        return <Check size={12} className="tool-status-icon complete status-pop" />;
-      case 'error':
-        return <X size={12} className="tool-status-icon error" />;
-      default:
-        return <Loader size={12} className="spinner tool-status-icon running" />;
-    }
-  };
+  const isRunning = status === 'running' || !status;
+  const isComplete = status === 'complete';
+  const isErrorState = status === 'error';
+  const iconColor = isComplete ? 'var(--stream-live)' : isErrorState ? 'var(--gate-deny)' : toolIcon.color;
 
   const primaryValue = formatToolInput(toolInput);
   const resultText = formatResult(result);
@@ -71,8 +63,12 @@ function ToolUseBlock({ toolName, toolInput, toolUseId, status, result, isError 
     <div className="tool-line">
       <div className="tool-line-header" onClick={() => setExpanded(!expanded)}>
         {expanded ? <ChevronDown size={12} className="tool-chevron" /> : <ChevronRight size={12} className="tool-chevron" />}
-        {statusIcon()}
-        <ToolTypeIcon size={12} className="tool-type-icon" style={{ color: toolIcon.color }} />
+        {isErrorState ? (
+          <X size={12} className="tool-status-icon error" />
+        ) : (
+          <ToolTypeIcon size={12} className="tool-type-icon" style={{ color: iconColor }} />
+        )}
+        {isRunning && <Loader size={12} className="spinner tool-status-icon running" />}
         <span className="tool-line-name">{toolName}</span>
         {primaryValue && <span className="tool-line-preview">{primaryValue}</span>}
       </div>

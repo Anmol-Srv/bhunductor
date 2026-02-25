@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronRight, ChevronDown, Loader, Check, X } from 'lucide-react';
+import { ChevronRight, ChevronDown, Loader, X, Wrench } from 'lucide-react';
 import ToolUseBlock from './ToolUseBlock';
 
 function getToolNamesPreview(tools) {
@@ -20,12 +20,7 @@ function ToolCallGroup({ tools }) {
   const hasError = tools.some(t => t.status === 'error');
   const allComplete = tools.every(t => t.status === 'complete');
 
-  const groupIcon = () => {
-    if (hasRunning) return <Loader size={12} className="spinner tool-status-icon running" />;
-    if (hasError) return <X size={12} className="tool-status-icon error" />;
-    if (allComplete) return <Check size={12} className="tool-status-icon complete status-pop" />;
-    return <Loader size={12} className="spinner tool-status-icon running" />;
-  };
+  const iconColor = allComplete ? 'var(--stream-live)' : hasError ? 'var(--gate-deny)' : 'var(--ink-secondary)';
 
   const completedCount = tools.filter(t => t.status === 'complete').length;
   const label = hasRunning
@@ -37,7 +32,12 @@ function ToolCallGroup({ tools }) {
     <div className="tool-call-group">
       <div className="tool-call-group-header" onClick={() => setExpanded(!expanded)}>
         {expanded ? <ChevronDown size={12} className="tool-chevron" /> : <ChevronRight size={12} className="tool-chevron" />}
-        {groupIcon()}
+        {hasError ? (
+          <X size={12} className="tool-status-icon error" />
+        ) : (
+          <Wrench size={12} className="tool-type-icon" style={{ color: iconColor }} />
+        )}
+        {hasRunning && <Loader size={12} className="spinner tool-status-icon running" />}
         <span className="tool-call-group-label">{label}</span>
         {!expanded && (
           <span className="tool-call-group-names">{namesPreview}</span>

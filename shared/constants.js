@@ -48,6 +48,7 @@ const IPC_CHANNELS = {
   CLAUDE_SESSION_CHECK_ALIVE: 'claude:session-check-alive',
   CLAUDE_RENDERER_READY: 'claude:renderer-ready',
   CLAUDE_SESSION_GET_ACTIVE: 'claude:session-get-active',
+  CLAUDE_PERMISSION_DISMISSED: 'claude:permission-dismissed',
 
   FILE_TREE_GET: 'file:tree-get',
   FILE_READ_CONTENT: 'file:read-content',
@@ -92,6 +93,14 @@ const HIDDEN_TOOLS = [
   'mcp__bhunductor-permissions__rename_session'
 ];
 
+const CLAUDE_MODELS = [
+  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
+  { id: 'claude-opus-4-6', label: 'Opus 4.6' },
+  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' }
+];
+
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
+
 module.exports = {
   IPC_CHANNELS,
   APP_DATA_DIR,
@@ -101,5 +110,7 @@ module.exports = {
   WINDOW_WIDTH,
   WINDOW_HEIGHT,
   PERMISSION_TIMEOUT_MS,
-  HIDDEN_TOOLS
+  HIDDEN_TOOLS,
+  CLAUDE_MODELS,
+  DEFAULT_MODEL
 };

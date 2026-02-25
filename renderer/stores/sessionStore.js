@@ -14,6 +14,12 @@ const useSessionStore = create((set, get) => ({
   // Per-session permission queue: { [sessionId]: [permissionData, ...] }
   permissionQueues: {},
 
+  // Per-session selected model: { [sessionId]: modelId }
+  sessionModels: {},
+
+  // Per-session last sent model (for switch detection): { [sessionId]: modelId }
+  lastSentModels: {},
+
   // Per-session last event timestamp for health checks
   lastEventTime: {},
 
@@ -111,6 +117,18 @@ const useSessionStore = create((set, get) => ({
       [sessionId]: (state.permissionQueues[sessionId] || []).slice(1)
     }
   })),
+  removePermission: (sessionId, requestId) => set(state => ({
+    permissionQueues: {
+      ...state.permissionQueues,
+      [sessionId]: (state.permissionQueues[sessionId] || []).filter(p => p.requestId !== requestId)
+    }
+  })),
+  clearPermissions: (sessionId) => set(state => ({
+    permissionQueues: {
+      ...state.permissionQueues,
+      [sessionId]: []
+    }
+  })),
 
   // --- Health tracking ---
   recordEvent: (sessionId) => set(state => ({
@@ -147,6 +165,14 @@ const useSessionStore = create((set, get) => ({
       get().setStreaming(sessionId, false);
     }
   },
+
+  // --- Per-session model tracking ---
+  setSessionModel: (sessionId, modelId) => set(state => ({
+    sessionModels: { ...state.sessionModels, [sessionId]: modelId }
+  })),
+  markModelSent: (sessionId, modelId) => set(state => ({
+    lastSentModels: { ...state.lastSentModels, [sessionId]: modelId }
+  })),
 
   // --- Session CRUD ---
   setSessions: (worktreeId, sessions) => set(state => ({
@@ -258,6 +284,7 @@ const useSessionStore = create((set, get) => ({
     get().finalizeRunningTools(sessionId);
     get().setStreaming(sessionId, false);
     get().clearEventTime(sessionId);
+    get().clearPermissions(sessionId);
     const messages = messageCache.get(sessionId) || [];
     if (messages.length > 0) {
       await window.electron.invoke('claude:session-save-messages', sessionId, messages).catch(() => {});
@@ -293,8 +320,8 @@ const useSessionStore = create((set, get) => ({
     }
     return result;
   },
-  sendMessage: async (sessionId, message) => {
-    return window.electron.invoke('claude:send-message', sessionId, message);
+  sendMessage: async (sessionId, message, model) => {
+    return window.electron.invoke('claude:send-message', sessionId, message, model || undefined);
   },
   sendInstruction: async (sessionId, text, meta) => {
     // meta: { action, label, fileName }

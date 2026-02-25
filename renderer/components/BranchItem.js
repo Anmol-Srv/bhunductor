@@ -7,6 +7,7 @@ function BranchItem({
   isActive,
   sessions,
   openTabs,
+  activeTabId,
   onSelect,
   onDelete,
   onClose,
@@ -56,15 +57,21 @@ function BranchItem({
     return openTabs.some(t => t.sessionId === sessionId);
   };
 
+  const isSessionSelected = (sessionId) => {
+    const tab = openTabs.find(t => t.sessionId === sessionId);
+    return tab && (tab.id || tab.sessionId) === activeTabId;
+  };
+
   const renderActiveSession = (session) => {
     const sessId = session.sessionId || session.id;
     const sessName = session.title || session.name || `Session ${sessId.slice(0, 8)}`;
     const timeLabel = formatRelativeTime(session.last_active_at || session.created_at);
     const isOpen = isSessionOpen(sessId);
+    const isSelected = isSessionSelected(sessId);
     return (
       <div
         key={sessId}
-        className={`session-item ${isOpen ? 'open' : ''}`}
+        className={`session-item ${isOpen ? 'open' : ''} ${isSelected ? 'selected' : ''}`}
         onClick={(e) => {
           e.stopPropagation();
           onOpenSession(sessId, worktree.id, worktree.branch_name);
@@ -84,10 +91,11 @@ function BranchItem({
     const sessId = session.sessionId || session.id;
     const sessName = session.title || session.name || `Session ${sessId.slice(0, 8)}`;
     const timeLabel = formatRelativeTime(session.last_active_at || session.created_at);
+    const isSelected = isSessionSelected(sessId);
     return (
       <div
         key={sessId}
-        className="session-item inactive"
+        className={`session-item inactive ${isSelected ? 'selected' : ''}`}
         onClick={(e) => {
           e.stopPropagation();
           onOpenSession(sessId, worktree.id, worktree.branch_name);
@@ -162,7 +170,6 @@ function BranchItem({
         <span className="branch-chevron">
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </span>
-        <GitBranch size={13} className="branch-icon" />
         <span className="branch-name">{worktree.branch_name}</span>
         {isMain && <span className="main-badge">main</span>}
         {worktree.status === 'merged' && (
@@ -232,17 +239,19 @@ function BranchItem({
           {activeSessions.map(renderActiveSession)}
           {inactiveSessions.map(renderInactiveSession)}
 
-          {/* New session button */}
-          <button
-            className="new-session-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              onStartSession(worktree.id);
-            }}
-          >
-            <Plus size={12} />
-            <span>New session</span>
-          </button>
+          {/* New session button — only show when no sessions exist */}
+          {!hasSessions && (
+            <button
+              className="new-session-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartSession(worktree.id);
+              }}
+            >
+              <Plus size={12} />
+              <span>New session</span>
+            </button>
+          )}
 
           {/* Archive section - only show if there are archived sessions */}
           {archivedSessions.length > 0 && (
