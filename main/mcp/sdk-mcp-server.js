@@ -11,8 +11,6 @@ async function loadSDK() {
 
 /**
  * Create an in-process MCP server for Bhunductor with the rename_session tool.
- * Replaces the external permission-server.js subprocess.
- *
  * Must be called with await (SDK is loaded lazily via dynamic import).
  *
  * @param {(title: string) => void} onRename - Callback when Claude renames the session

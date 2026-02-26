@@ -38,7 +38,7 @@ class SDKSession {
     this.abortController = null;
     this.isRunning = false;
 
-    // Streaming state (same as ClaudeProcess for dedup)
+    // Streaming state (for dedup)
     this.hasStreamedContent = false;
     this.forwardedToolUseIds = new Set();
     this.currentContentBlock = null;
@@ -331,7 +331,7 @@ class SDKSession {
 
   /**
    * SDKAssistantMessage — complete message (fallback if no streaming).
-   * Same dedup logic as ClaudeProcess: skip if hasStreamedContent.
+   * Skip if streaming already delivered content (dedup).
    */
   _handleAssistantMessage(message) {
     if (!message.message?.content) return;
